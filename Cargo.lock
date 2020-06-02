@@ -2070,6 +2070,7 @@ version = "0.1.0"
 dependencies = [
  "failure",
  "hex 0.4.2",
+ "jsonrpc",
  "log 0.4.8",
  "nomic-bitcoin",
  "nomic-client",

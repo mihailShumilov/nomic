@@ -159,22 +159,32 @@ fn header_step() -> Result<()> {
     Ok(())
 }
 
+const CHECKPOINT_WINDOW: u64 = 5;
+
 fn checkpoint_step() -> Result<()> {
     let btc_rpc = make_rpc_client().unwrap();
     let peg_client = PegClient::new("localhost:26657")?;
 
-    let btc_tx = match peg_client.get_finalized_checkpoint_tx()? {
-        None => return Ok(()),
-        Some(btc_tx) => btc_tx,
-    };
+    // Try to relay the last three finalized checkpoints
+    let btc_txs = peg_client.state()?.peg.finalized_checkpoint_txs;
+    let len = CHECKPOINT_WINDOW.min(btc_txs.len());
+    for i in 0..len {
+        let tx = btc_txs.get(btc_txs.len() - (len - i) - 1)?;
 
-    println!("relaying checkpoint to bitcoin: {:?}", &btc_tx);
+        info!("relaying checkpoint to bitcoin: {:?}", &tx);
 
-    if let Err(err) = btc_rpc.send_raw_transaction(&btc_tx) {
-        // TODO: downcast into something better
-        if err.to_string() != "JSON-RPC error: RPC error response: RpcError { code: -27, message: \"Transaction already in block chain\", data: None }" {
-            return Err(err.into())
+        use bitcoincore_rpc::Error;
+        use jsonrpc::Error as JsonRpcError;
+        let res = btc_rpc.send_raw_transaction(&tx);
+        if let Err(Error::JsonRpc(JsonRpcError::Rpc(err))) = &res {
+            // Error code -25: missing inputs (caused by trying to use spent tx outputs)
+            // Error code -27: transaction already in blockchain
+            if err.code != -27 && err.code != -25 {
+                return Err(res.unwrap_err().into());
+            }
+            continue;
         }
+        res?;
     }
 
     Ok(())
