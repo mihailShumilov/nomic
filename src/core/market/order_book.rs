@@ -4,7 +4,7 @@ use orga::{
     collections::{Map, Set},
     state, Decode, Encode, Entry, Iter, MapStore, Store, Value,
 };
-use std::hash::{Hash, Hasher};
+
 use std::marker::PhantomData;
 
 #[derive(Encode, Decode, Debug)]
@@ -153,7 +153,7 @@ impl OrderBookState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use orga::{MapStore, WrapStore};
+    use orga::MapStore;
 
     #[test]
     fn basic() {

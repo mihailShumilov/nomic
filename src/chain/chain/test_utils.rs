@@ -9,7 +9,7 @@ use bitcoin::consensus::encode as bitcoin_encode;
 use bitcoin::util::hash::bitcoin_merkle_root;
 use bitcoin::util::merkleblock::PartialMerkleTree;
 use lazy_static::lazy_static;
-use orga::{abci::messages::Header as TendermintHeader, MapStore, Store, WrapStore};
+use orga::{abci::messages::Header as TendermintHeader, MapStore, Store};
 
 use protobuf::well_known_types::Timestamp;
 use secp256k1::{Secp256k1, SecretKey, SignOnly};
@@ -52,7 +52,7 @@ impl MockNet {
             validator_privkeys: validators.1,
         };
 
-        let mut state = super::peg::State::wrap_store(&mut net.store).unwrap();
+        let mut state: super::peg::State<_> = net.store.as_mut().wrap().unwrap();
         HeaderCache::new(bitcoin::Network::Regtest, &mut state.headers)
             .add_header_raw(initial_block.header, 0)
             .expect("failed to create mock net");
@@ -96,8 +96,8 @@ impl MockNet {
         let mut net = MockNet::with_btc_block(block);
         let (tx, proof) = net.create_btc_proof();
 
-        let mut peg_state = super::peg::State::wrap_store(&mut net.store).unwrap();
-        let mut account_state = super::accounts::State::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state: super::peg::State<_> = net.store.as_mut().wrap().unwrap();
+        let mut account_state: super::accounts::State<_> = net.store2.as_mut().wrap().unwrap();
 
         let deposit = DepositTransaction {
             height: 0,

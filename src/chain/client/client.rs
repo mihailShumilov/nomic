@@ -14,7 +14,7 @@ use orga::{
     Store, Write,
 };
 
-use std::cell::{RefCell, RefMut};
+use std::cell::{RefCell};
 use std::ops::DerefMut;
 use std::str::FromStr;
 use tendermint_rpc::Client as TendermintRpcClient;

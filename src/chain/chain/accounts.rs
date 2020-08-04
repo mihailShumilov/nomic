@@ -67,14 +67,13 @@ fn unsafe_slice_to_address(slice: &[u8]) -> Address {
 mod tests {
     use super::super::test_utils::*;
     use super::*;
-    use orga::WrapStore;
 
     #[test]
     #[should_panic(expected = "Transaction fee is too small")]
     fn transfer_insufficient_fee() {
         let mut net = MockNet::new();
 
-        let mut accounts = State::wrap_store(&mut net.store).unwrap();
+        let mut accounts = net.store.wrap().unwrap();
 
         let receiver_address = vec![124; 33];
         let sender = create_sender(&mut accounts, 1234, 0);
@@ -113,7 +112,7 @@ mod tests {
         let sig = sign(&mut tx, sender_privkey);
         tx.signature = sig;
 
-        let mut accounts = State::wrap_store(&mut net.store).unwrap();
+        let mut accounts = net.store.as_mut().wrap().unwrap();
         handlers::transfer_tx(&mut accounts, tx).unwrap();
     }
 
@@ -122,7 +121,7 @@ mod tests {
     fn transfer_insufficient_balance() {
         let mut net = MockNet::new();
 
-        let mut accounts = State::wrap_store(&mut net.store).unwrap();
+        let mut accounts = net.store.as_mut().wrap().unwrap();
         let receiver_address = vec![124; 33];
         let sender = create_sender(&mut accounts, 1234, 0);
 
@@ -145,7 +144,7 @@ mod tests {
     fn transfer_invalid_nonce() {
         let mut net = MockNet::new();
 
-        let mut accounts = State::wrap_store(&mut net.store).unwrap();
+        let mut accounts = net.store.as_mut().wrap().unwrap();
         let receiver_address = vec![124; 33];
         let sender = create_sender(&mut accounts, 1234, 100);
 
@@ -168,7 +167,7 @@ mod tests {
     fn transfer_invalid_signature() {
         let mut net = MockNet::new();
 
-        let mut accounts = State::wrap_store(&mut net.store).unwrap();
+        let mut accounts = net.store.as_mut().wrap().unwrap();
         let receiver_address = vec![124; 33];
         let sender = create_sender(&mut accounts, 1234, 0);
 
@@ -191,7 +190,7 @@ mod tests {
     fn transfer_ok() {
         let mut net = MockNet::new();
 
-        let mut accounts = State::wrap_store(&mut net.store).unwrap();
+        let mut accounts = net.store.as_mut().wrap().unwrap();
         let receiver_address = vec![124; 33];
         let sender = create_sender(&mut accounts, 1234, 0);
 

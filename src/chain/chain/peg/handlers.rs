@@ -428,7 +428,7 @@ mod tests {
     use crate::core::signatory_set::{Signatory, SignatorySet, SignatorySetSnapshot};
     use bitcoin::Network::Testnet as bitcoin_network;
     use lazy_static::lazy_static;
-    use orga::{abci::messages::Header as TendermintHeader, MapStore, WrapStore};
+    use orga::{abci::messages::Header as TendermintHeader, MapStore};
     use protobuf::well_known_types::Timestamp;
     use signatories_from_validators;
 
@@ -440,7 +440,7 @@ mod tests {
     #[test]
     fn init() {
         let mut store = MapStore::new();
-        let mut state = PegState::wrap_store(&mut store).unwrap();
+        let mut state: PegState<_> = store.as_mut().wrap().unwrap();
         let chkpt = get_checkpoint_header();
         super::initialize(&mut state).unwrap();
 
@@ -460,7 +460,7 @@ mod tests {
         let (_, new_val_pubkey) = create_keypair(2);
 
         fn get_state<'a>(net: &'a mut MockNet) -> PegState<&'a mut MapStore> {
-            PegState::wrap_store(&mut net.store).unwrap()
+            net.store.as_mut().wrap().unwrap()
         }
 
         {
@@ -487,7 +487,7 @@ mod tests {
         const TEST_START_TIME: u64 = 100_000_000;
         let mut time = TEST_START_TIME as i64;
         let mut next_checkpoint = |net: &mut MockNet| {
-            let mut state = PegState::wrap_store(&mut net.store).unwrap();
+            let mut state = net.store.as_mut().wrap().unwrap();
 
             let mut header: TendermintHeader = Default::default();
             let mut timestamp = Timestamp::new();
@@ -559,8 +559,8 @@ mod tests {
             recipients: vec![],
         };
 
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state = net.store.as_mut().wrap().unwrap();
+        let mut account_state = net.store2.as_mut().wrap().unwrap();
 
         deposit_tx(&mut peg_state, &mut account_state, deposit).unwrap();
     }
@@ -580,8 +580,8 @@ mod tests {
             block_index: 0,
             recipients: vec![],
         };
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state = net.store.as_mut().wrap().unwrap();
+        let mut account_state = net.store2.as_mut().wrap().unwrap();
 
         deposit_tx(&mut peg_state, &mut account_state, deposit).unwrap();
     }
@@ -599,8 +599,8 @@ mod tests {
             block_index: 0,
             recipients: vec![vec![123; 33]],
         };
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state = net.store.as_mut().wrap().unwrap();
+        let mut account_state = net.store2.as_mut().wrap().unwrap();
 
         deposit_tx(&mut peg_state, &mut account_state, deposit).unwrap();
     }
@@ -627,8 +627,8 @@ mod tests {
             recipients: vec![vec![123; 33]],
         };
 
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state = net.store.as_mut().wrap().unwrap();
+        let mut account_state = net.store2.as_mut().wrap().unwrap();
 
         deposit_tx(&mut peg_state, &mut account_state, deposit.clone()).unwrap();
         deposit_tx(&mut peg_state, &mut account_state, deposit).unwrap();
@@ -655,8 +655,8 @@ mod tests {
             block_index: 0,
             recipients: vec![],
         };
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state = net.store.as_mut().wrap().unwrap();
+        let mut account_state = net.store2.as_mut().wrap().unwrap();
 
         deposit_tx(&mut peg_state, &mut account_state, deposit).unwrap();
     }
@@ -674,8 +674,8 @@ mod tests {
         let block = build_block(vec![tx.clone()]);
         let mut net = MockNet::with_btc_block(block);
         let (tx, proof) = net.create_btc_proof();
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state = net.store.as_mut().wrap().unwrap();
+        let mut account_state = net.store2.as_mut().wrap().unwrap();
 
         let deposit = DepositTransaction {
             height: 0,
@@ -699,8 +699,8 @@ mod tests {
     #[test]
     fn withdrawal_ok() {
         let mut net = MockNet::new();
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state: PegState<_> = net.store.as_mut().wrap().unwrap();
+        let mut account_state: AccountState<_> = net.store2.as_mut().wrap().unwrap();
 
         let sender = create_sender(&mut account_state, 1234, 0);
 
@@ -732,8 +732,8 @@ mod tests {
     #[should_panic(expected = "Invalid signature")]
     fn withdrawal_invalid_signature() {
         let mut net = MockNet::new();
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state: PegState<_> = net.store.as_mut().wrap().unwrap();
+        let mut account_state: AccountState<_> = net.store2.as_mut().wrap().unwrap();
 
         let sender = create_sender(&mut account_state, 1234, 0);
 
@@ -754,8 +754,8 @@ mod tests {
     #[should_panic(expected = "Invalid account nonce for withdrawal transaction")]
     fn withdrawal_invalid_nonce() {
         let mut net = MockNet::new();
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state: PegState<_> = net.store.as_mut().wrap().unwrap();
+        let mut account_state: AccountState<_> = net.store2.as_mut().wrap().unwrap();
 
         let sender = create_sender(&mut account_state, 1234, 100);
 
@@ -775,8 +775,8 @@ mod tests {
     #[should_panic(expected = "Insufficient balance in sender account")]
     fn withdrawal_insufficient_balance() {
         let mut net = MockNet::new();
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state: PegState<_> = net.store.as_mut().wrap().unwrap();
+        let mut account_state: AccountState<_> = net.store2.as_mut().wrap().unwrap();
 
         let sender = create_sender(&mut account_state, 1234, 0);
 
@@ -796,8 +796,8 @@ mod tests {
     #[should_panic(expected = "Account does not exist")]
     fn withdrawal_from_nonexistent_account() {
         let mut net = MockNet::new();
-        let mut peg_state = PegState::wrap_store(&mut net.store).unwrap();
-        let mut account_state = AccountState::wrap_store(&mut net.store2).unwrap();
+        let mut peg_state: PegState<_> = net.store.as_mut().wrap().unwrap();
+        let mut account_state: AccountState<_> = net.store2.as_mut().wrap().unwrap();
 
         let (sender_privkey, sender_pubkey) = create_keypair(1);
         let sender_address = sender_pubkey.serialize().to_vec();
@@ -819,7 +819,7 @@ mod tests {
     #[should_panic(expected = "No checkpoint in progress")]
     fn signatory_signature_no_active_checkpoint() {
         let mut net = MockNet::new();
-        let mut state = PegState::wrap_store(&mut net.store).unwrap();
+        let mut state: PegState<_> = net.store.as_mut().wrap().unwrap();
 
         let tx = SignatureTransaction {
             signatures: vec![],
@@ -832,7 +832,7 @@ mod tests {
     #[should_panic(expected = "Number of signatures does not match number of inputs")]
     fn signatory_signature_incorrect_signature_count() {
         let mut net = MockNet::with_active_checkpoint();
-        let mut state = PegState::wrap_store(&mut net.store).unwrap();
+        let mut state: PegState<_> = net.store.as_mut().wrap().unwrap();
 
         let tx = SignatureTransaction {
             signatures: vec![],
@@ -845,7 +845,7 @@ mod tests {
     #[should_panic(expected = "Invalid signature length")]
     fn signatory_invalid_signature_length() {
         let mut net = MockNet::with_active_checkpoint();
-        let mut state = PegState::wrap_store(&mut net.store).unwrap();
+        let mut state: PegState<_> = net.store.as_mut().wrap().unwrap();
 
         let tx = SignatureTransaction {
             signatures: vec![vec![1, 2, 3]],
@@ -858,7 +858,7 @@ mod tests {
     #[should_panic(expected = "Signatory index out of bounds")]
     fn signatory_invalid_signatory_index() {
         let mut net = MockNet::with_active_checkpoint();
-        let mut state = PegState::wrap_store(&mut net.store).unwrap();
+        let mut state: PegState<_> = net.store.as_mut().wrap().unwrap();
 
         let tx = SignatureTransaction {
             signatures: vec![vec![123; 64]],
@@ -871,7 +871,7 @@ mod tests {
     #[should_panic(expected = "IncorrectSignature")]
     fn signatory_invalid_signature() {
         let mut net = MockNet::with_active_checkpoint();
-        let mut state = PegState::wrap_store(&mut net.store).unwrap();
+        let mut state: PegState<_> = net.store.as_mut().wrap().unwrap();
 
         let tx = SignatureTransaction {
             signatures: vec![vec![123; 64]],
@@ -884,7 +884,7 @@ mod tests {
     fn signatory_ok() {
         let mut net = MockNet::with_active_checkpoint();
 
-        let mut state = PegState::wrap_store(&mut net.store).unwrap();
+        let mut state: PegState<_> = net.store.as_mut().wrap().unwrap();
         assert!(state.active_checkpoint.is_active.get().unwrap());
         assert_eq!(state.utxos.len(), 0);
 
