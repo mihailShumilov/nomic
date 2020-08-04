@@ -96,7 +96,7 @@ pub fn main() {
         nomic_home.push(".nomic-testnet");
     }
     let mkdir_result = fs::create_dir(&nomic_home);
-    if let Err(_) = mkdir_result {
+    if mkdir_result.is_err() {
         // TODO: Panic if this error is anything except "directory already exists"
     }
 
@@ -122,7 +122,7 @@ pub fn main() {
             // Start the signatory process
             loop {
                 // poll until RPC is available
-                if let Ok(_) = Client::new("localhost:26657") {
+                if Client::new("localhost:26657").is_ok() {
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_secs(1));
@@ -145,7 +145,7 @@ pub fn main() {
                     .send()?;
 
                 if res.status() == 200 {
-                    return Ok(());
+                    Ok(())
                 } else {
                     bail!("Invalid request to the address pool: {}", res.status());
                 }
