@@ -1,12 +1,11 @@
 use super::{accounts, peg, work, Action};
 use crate::core::primitives::transaction::Transaction;
 use crate::core::primitives::Result;
-use orga::Store;
-use orga::{state, WrapStore};
+use orga::{state, Store};
 use std::collections::BTreeMap;
 
 #[state]
-pub struct State {
+pub struct State<S: Store> {
     pub peg: peg::State,
     pub accounts: accounts::State,
     pub work: work::State,
@@ -17,7 +16,7 @@ pub fn run<S: Store>(
     action: Action,
     validators: &mut BTreeMap<Vec<u8>, u64>,
 ) -> Result<()> {
-    let mut state = State::wrap_store(store)?;
+    let mut state: State<_> = store.wrap()?;
 
     #[cfg_attr(rustfmt, rustfmt_skip)]
     match action {
@@ -49,6 +48,6 @@ pub fn run<S: Store>(
 // TODO: this should be Action::InitChain
 /// Called once at genesis to write some data to the store.
 pub fn initialize<S: Store>(store: S) -> Result<()> {
-    let mut state = State::wrap_store(store)?;
+    let mut state: State<_> = store.wrap()?;
     peg::handlers::initialize(&mut state.peg)
 }

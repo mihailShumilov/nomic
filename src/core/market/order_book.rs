@@ -2,7 +2,7 @@ use crate::core::primitives::Address;
 use crate::Result;
 use orga::{
     collections::{Map, Set},
-    state, Decode, Encode, Entry, Iter, MapStore, Store, Value, WrapStore,
+    state, Decode, Encode, Entry, Iter, MapStore, Store, Value,
 };
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -108,7 +108,7 @@ impl<T: Entry> EntryMap<T> {
     }
     pub fn new() -> Self {
         Self {
-            map: Map::wrap_store(MapStore::new()).unwrap(),
+            map: MapStore::new().wrap().unwrap(),
         }
     }
 

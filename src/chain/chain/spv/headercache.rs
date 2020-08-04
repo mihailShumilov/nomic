@@ -135,17 +135,17 @@ impl BitcoinHash<Sha256dHash> for CachedHeader {
     }
 }
 
-pub struct HeaderCache<'a> {
+pub struct HeaderCache<S: Store> {
     // network
     network: Network,
     // header chain with most work
     pub trunk: Vec<Sha256dHash>,
     // orga store to use instead of headers hashmap
-    store: &'a mut dyn Store,
+    store: S,
 }
 
-impl<'a> HeaderCache<'a> {
-    pub fn new(network: Network, store: &'a mut dyn Store) -> HeaderCache {
+impl<S: Store> HeaderCache<S> {
+    pub fn new(network: Network, store: S) -> Self {
         HeaderCache {
             network,
             store,

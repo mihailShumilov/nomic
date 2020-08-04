@@ -11,7 +11,7 @@ use blocking::block_on;
 use failure::bail;
 use orga::{
     abci::TendermintClient, merkstore::Client as MerkStoreClient, Read, Result as OrgaResult,
-    WrapStore, Write,
+    Store, Write,
 };
 
 use std::cell::{RefCell, RefMut};
@@ -66,8 +66,8 @@ impl Client {
         })
     }
 
-    pub fn state<'a>(&'a self) -> OrgaResult<State<RefMut<'a, RemoteStore>>> {
-        State::wrap_store(self.store.borrow_mut())
+    pub fn state<'a>(&'a self) -> OrgaResult<State<impl Store + 'a>> {
+        self.store.borrow_mut().wrap()
     }
 
     /// Transmit a transaction the peg state machine.
