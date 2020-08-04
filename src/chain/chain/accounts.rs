@@ -71,7 +71,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Transaction fee is too small")]
     fn transfer_insufficient_fee() {
-        let mut net = MockNet::new();
+        let net = MockNet::new();
 
         let mut accounts = net.store.wrap().unwrap();
 

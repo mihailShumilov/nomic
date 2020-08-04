@@ -153,7 +153,7 @@ impl OrderBookState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use orga::MapStore;
+    
 
     #[test]
     fn basic() {
