@@ -2,23 +2,22 @@ use crate::core::primitives::Address;
 use crate::Result;
 use orga::{
     collections::{Map, Set},
-    state, Decode, Encode, Entry, Iter, MapStore, Store, Value,
+    state, Decode, Encode, Entry, MapStore, Store, Value,
 };
-
 use std::marker::PhantomData;
 
 #[derive(Encode, Decode, Debug)]
-struct OrderKey {
+pub struct OrderKey {
     pub price: u64,
     pub creator: Address,
     pub height: u64,
 }
 #[derive(Encode, Decode, Debug)]
-struct OrderValue {
+pub struct OrderValue {
     pub size: u64,
 }
-#[derive(Eq, PartialEq, Debug, Clone, Copy)]
-struct Order {
+#[derive(Eq, PartialEq, Debug, Encode, Decode, Clone, Copy)]
+pub struct Order {
     pub price: u64,
     pub creator: Address,
     pub height: u64,
@@ -26,7 +25,7 @@ struct Order {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
-struct Bid(Order);
+pub struct Bid(Order);
 
 impl Entry for Bid {
     type Key = OrderKey;
@@ -59,7 +58,8 @@ impl Entry for Bid {
     }
 }
 
-struct Ask(Order);
+#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+pub struct Ask(Order);
 
 impl Entry for Ask {
     type Key = OrderKey;
@@ -106,6 +106,12 @@ impl<T: Entry> EntryMap<T> {
         let (key, value) = entry.into_entry();
         self.map.insert(key, value)
     }
+
+    pub fn delete(&mut self, entry: T) -> Result<()> {
+        let (key, value) = entry.into_entry();
+        self.map.delete(key)
+    }
+
     pub fn new() -> Self {
         Self {
             map: MapStore::new().wrap().unwrap(),
@@ -141,6 +147,20 @@ where
     }
 }
 
+#[derive(Debug, Encode, Decode, Default, PartialEq, Eq)]
+pub struct PlaceResult {
+    pub total_fill_size: u64,
+    pub fills: Vec<Order>,
+}
+pub enum Side {
+    Buy,
+    Sell,
+}
+pub enum OrderOptions {
+    Limit { side: Side, price: u64, size: u64 },
+    Market { side: Side, size: u64 },
+}
+
 impl OrderBookState {
     pub fn new() -> Self {
         OrderBookState {
@@ -148,15 +168,46 @@ impl OrderBookState {
             asks: EntryMap::new(),
         }
     }
+
+    pub fn place_market_buy(&mut self, size: u64, creator: &Address) -> Result<PlaceResult> {
+        let mut result = PlaceResult::default();
+
+        loop {
+            let remaining_size = size - result.total_fill_size;
+            let next_ask = self.asks.iter().next();
+            let mut next_ask = match next_ask {
+                Some(a) => a,
+                None => break,
+            };
+
+            if remaining_size >= next_ask.0.size {
+                // Completely filling the ask, removing it from order book.
+                result.total_fill_size += next_ask.0.size;
+                result.fills.push(next_ask.0.clone());
+                self.asks.delete(next_ask)?;
+            } else {
+                // Partially filling the ask, updating it on the order book.
+                result.total_fill_size += remaining_size;
+                let mut partial_fill = next_ask.0.clone();
+                partial_fill.size = remaining_size;
+                result.fills.push(partial_fill);
+            }
+
+            if size == result.total_fill_size {
+                break;
+            }
+        }
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
-    fn basic() {
+    fn ordering() {
         let mut state = OrderBookState::new();
 
         let bid1 = Bid(Order {
@@ -182,9 +233,76 @@ mod tests {
         state.bids.insert(bid2).unwrap();
         state.bids.insert(bid3).unwrap();
 
+        let ask1 = Ask(Order {
+            height: 42,
+            size: 10,
+            price: 10000,
+            creator: [2; 33],
+        });
+        let ask2 = Ask(Order {
+            height: 42,
+            size: 10,
+            price: 11000,
+            creator: [2; 33],
+        });
+        let ask3 = Ask(Order {
+            height: 42,
+            size: 10,
+            price: 9000,
+            creator: [2; 33],
+        });
+        state.asks.insert(ask1).unwrap();
+        state.asks.insert(ask2).unwrap();
+        state.asks.insert(ask3).unwrap();
+
         let mut bids = state.bids.iter();
         assert_eq!(bids.next().unwrap(), bid2);
         assert_eq!(bids.next().unwrap(), bid1);
         assert_eq!(bids.next().unwrap(), bid3);
+
+        let mut asks = state.asks.iter();
+        assert_eq!(asks.next().unwrap(), ask3);
+        assert_eq!(asks.next().unwrap(), ask1);
+        assert_eq!(asks.next().unwrap(), ask2);
+    }
+
+    #[test]
+    fn matching() {
+        let mut state = OrderBookState::new();
+        state.asks.insert(Ask(Order {
+            creator: [2; 33],
+            height: 42,
+            size: 10,
+            price: 10,
+        }));
+        state.asks.insert(Ask(Order {
+            creator: [2; 33],
+            height: 42,
+            size: 10,
+            price: 30,
+        }));
+
+        let res = state.place_market_buy(15, &[2; 33]).unwrap();
+        println!("{:?}", res);
+        assert_eq!(
+            res,
+            PlaceResult {
+                total_fill_size: 15,
+                fills: vec![
+                    Order {
+                        price: 10,
+                        creator: [2; 33],
+                        height: 42,
+                        size: 10
+                    },
+                    Order {
+                        price: 30,
+                        creator: [2; 33],
+                        height: 42,
+                        size: 5
+                    }
+                ],
+            }
+        )
     }
 }
