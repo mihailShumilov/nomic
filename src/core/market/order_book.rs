@@ -169,7 +169,10 @@ impl OrderBookState {
         }
     }
 
-    pub fn place_market_buy(&mut self, size: u64, creator: &Address) -> Result<PlaceResult> {
+    fn match_orders<I>(&self, order_iter: I, size: u64) -> Result<PlaceResult>
+    where
+        I: Iterator<Item = Order>,
+    {
         let mut result = PlaceResult::default();
 
         loop {
@@ -199,6 +202,22 @@ impl OrderBookState {
         }
 
         Ok(result)
+    }
+
+    pub fn place_market_buy(&mut self, size: u64, creator: &Address) -> Result<PlaceResult> {
+        let order_iter = self.asks.iter().map(|a| a.0);
+        self.match_orders(order_iter, size, creator)
+    }
+
+    pub fn place_limit_sell(
+        &mut self,
+        price: u64,
+        size: u64,
+        creator: &Address,
+    ) -> Result<PlaceResult> {
+        let result = PlaceResult::default();
+
+        // Match against existing orders before possibly writing to the book.
     }
 }
 
