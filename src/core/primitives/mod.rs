@@ -1,7 +1,9 @@
 mod account;
 mod error;
+mod number;
 pub use account::Account;
 pub use error::*;
+pub use number::*;
 pub mod transaction;
 use crate::core::bitcoin::{bitcoin, Script};
 use orga::{Decode, Encode};
