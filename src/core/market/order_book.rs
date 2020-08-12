@@ -300,6 +300,19 @@ impl OrderBookState {
     pub fn place_market_sell(&mut self, size: u64, creator: &Address) -> Result<PlaceResult> {
         Self::match_orders(&mut self.bids, size, creator, &Side::Sell, None)
     }
+
+    pub fn cancel_order(&mut self, side: Side, key: OrderKey) -> Result<()> {
+        let order = Order {
+            size: 0,
+            creator: key.creator,
+            height: key.height,
+            price: key.price,
+        };
+        match side {
+            Side::Sell => self.asks.delete(Ask(order)),
+            Side::Buy => self.bids.delete(Bid(order)),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -442,6 +455,36 @@ mod tests {
                     height: 42,
                 }]
             }
+        );
+    }
+
+    #[test]
+    fn order_cancellation() {
+        let mut state = OrderBookState::new();
+        state.place_limit_sell(10, &[2; 33], 10, 42).unwrap();
+        state.place_limit_sell(10, &[2; 33], 9, 42).unwrap();
+        state
+            .cancel_order(
+                Side::Sell,
+                OrderKey {
+                    price: 10,
+                    height: 42,
+                    creator: [2; 33],
+                },
+            )
+            .unwrap();
+        let res = state.place_market_buy(20, &[3; 33]).unwrap();
+        assert_eq!(
+            res,
+            PlaceResult {
+                total_fill_size: 10,
+                fills: vec![Order {
+                    price: 9,
+                    height: 42,
+                    size: 10,
+                    creator: [2; 33],
+                }],
+            },
         );
     }
 }
