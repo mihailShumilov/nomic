@@ -1,10 +1,8 @@
 use crate::core::primitives::Address;
 use crate::Result;
-use orga::{
-    collections::{Map, Set},
-    state, Decode, Encode, Entry, MapStore, Store, Value,
-};
+use orga::{collections::Map, Decode, Encode, Entry, MapStore, Store};
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 #[derive(Encode, Decode, Debug)]
 pub struct OrderKey {
@@ -26,6 +24,20 @@ pub struct Order {
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
 pub struct Bid(Order);
+
+impl Deref for Bid {
+    type Target = Order;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Bid {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 impl Entry for Bid {
     type Key = OrderKey;
@@ -60,6 +72,19 @@ impl Entry for Bid {
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
 pub struct Ask(Order);
+
+impl Deref for Ask {
+    type Target = Order;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl DerefMut for Ask {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 impl Entry for Ask {
     type Key = OrderKey;
@@ -108,7 +133,7 @@ impl<T: Entry> EntryMap<T> {
     }
 
     pub fn delete(&mut self, entry: T) -> Result<()> {
-        let (key, value) = entry.into_entry();
+        let (key, _value) = entry.into_entry();
         self.map.delete(key)
     }
 
@@ -122,7 +147,7 @@ impl<T: Entry> EntryMap<T> {
         let backing_iter = self.map.iter();
         EntryMapIter {
             backing_iter,
-            phantom_T: PhantomData,
+            phantom_t: PhantomData,
         }
     }
 }
@@ -133,7 +158,7 @@ where
     B: Iterator<Item = (T::Key, T::Value)>,
 {
     backing_iter: B,
-    phantom_T: PhantomData<T>,
+    phantom_t: PhantomData<T>,
 }
 impl<T, B> Iterator for EntryMapIter<T, B>
 where
