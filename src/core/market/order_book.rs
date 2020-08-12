@@ -177,6 +177,7 @@ pub struct PlaceResult {
     pub total_fill_size: u64,
     pub fills: Vec<Order>,
 }
+
 pub enum Side {
     Buy,
     Sell,
@@ -194,31 +195,45 @@ impl OrderBookState {
         }
     }
 
-    fn match_orders<I>(&self, order_iter: I, size: u64) -> Result<PlaceResult>
+    fn match_orders<T>(
+        orders: &mut EntryMap<T>,
+        size: u64,
+        creator: &Address,
+        side: &Side,
+        price: Option<u64>,
+    ) -> Result<PlaceResult>
     where
-        I: Iterator<Item = Order>,
+        T: Deref<Target = Order> + DerefMut + Entry + Copy,
     {
+        // TODO: order cost limiting
         let mut result = PlaceResult::default();
-
-        loop {
+        let mut orders_to_delete = vec![];
+        let mut order_to_insert = None;
+        for mut next_order in orders.iter() {
             let remaining_size = size - result.total_fill_size;
-            let next_ask = self.asks.iter().next();
-            let mut next_ask = match next_ask {
-                Some(a) => a,
-                None => break,
-            };
 
-            if remaining_size >= next_ask.0.size {
+            match (side, price) {
+                (Side::Buy, Some(price)) if price < next_order.price => break,
+                (Side::Sell, Some(price)) if price > next_order.price => break,
+                _ => (),
+            };
+            if &next_order.creator == creator {
+                continue;
+            }
+            if remaining_size >= next_order.size {
                 // Completely filling the ask, removing it from order book.
-                result.total_fill_size += next_ask.0.size;
-                result.fills.push(next_ask.0.clone());
-                self.asks.delete(next_ask)?;
+                result.total_fill_size += next_order.size;
+                result.fills.push(*next_order);
+                // orders.delete(next_order)?;
+                orders_to_delete.push(next_order);
             } else {
                 // Partially filling the ask, updating it on the order book.
                 result.total_fill_size += remaining_size;
-                let mut partial_fill = next_ask.0.clone();
+                let mut partial_fill = next_order;
                 partial_fill.size = remaining_size;
-                result.fills.push(partial_fill);
+                result.fills.push(*partial_fill);
+                next_order.size -= remaining_size;
+                order_to_insert = Some(next_order);
             }
 
             if size == result.total_fill_size {
@@ -226,23 +241,64 @@ impl OrderBookState {
             }
         }
 
-        Ok(result)
-    }
+        for order in orders_to_delete {
+            orders.delete(order)?;
+        }
+        if let Some(order) = order_to_insert {
+            orders.insert(order)?;
+        }
 
-    pub fn place_market_buy(&mut self, size: u64, creator: &Address) -> Result<PlaceResult> {
-        let order_iter = self.asks.iter().map(|a| a.0);
-        self.match_orders(order_iter, size, creator)
+        Ok(result)
     }
 
     pub fn place_limit_sell(
         &mut self,
-        price: u64,
         size: u64,
         creator: &Address,
+        price: u64,
+        height: u64,
     ) -> Result<PlaceResult> {
-        let result = PlaceResult::default();
+        let match_result =
+            Self::match_orders(&mut self.bids, size, creator, &Side::Sell, Some(price))?;
 
-        // Match against existing orders before possibly writing to the book.
+        // Place unfilled part of order into order book.
+        self.asks.insert(Ask(Order {
+            price,
+            creator: *creator,
+            height,
+            size: size - match_result.total_fill_size,
+        }))?;
+
+        Ok(match_result)
+    }
+
+    pub fn place_limit_buy(
+        &mut self,
+        size: u64,
+        creator: &Address,
+        price: u64,
+        height: u64,
+    ) -> Result<PlaceResult> {
+        let match_result =
+            Self::match_orders(&mut self.asks, size, creator, &Side::Buy, Some(price))?;
+
+        // Place unfilled part of order into order book.
+        self.bids.insert(Bid(Order {
+            price,
+            creator: *creator,
+            height,
+            size: size - match_result.total_fill_size,
+        }))?;
+
+        Ok(match_result)
+    }
+
+    pub fn place_market_buy(&mut self, size: u64, creator: &Address) -> Result<PlaceResult> {
+        Self::match_orders(&mut self.asks, size, creator, &Side::Buy, None)
+    }
+
+    pub fn place_market_sell(&mut self, size: u64, creator: &Address) -> Result<PlaceResult> {
+        Self::match_orders(&mut self.bids, size, creator, &Side::Sell, None)
     }
 }
 
@@ -311,22 +367,28 @@ mod tests {
     }
 
     #[test]
-    fn matching() {
+    fn partial_matching() {
         let mut state = OrderBookState::new();
-        state.asks.insert(Ask(Order {
-            creator: [2; 33],
-            height: 42,
-            size: 10,
-            price: 10,
-        }));
-        state.asks.insert(Ask(Order {
-            creator: [2; 33],
-            height: 42,
-            size: 10,
-            price: 30,
-        }));
+        state
+            .asks
+            .insert(Ask(Order {
+                creator: [2; 33],
+                height: 42,
+                size: 10,
+                price: 10,
+            }))
+            .unwrap();
+        state
+            .asks
+            .insert(Ask(Order {
+                creator: [3; 33],
+                height: 42,
+                size: 10,
+                price: 30,
+            }))
+            .unwrap();
 
-        let res = state.place_market_buy(15, &[2; 33]).unwrap();
+        let res = state.place_market_buy(15, &[4; 33]).unwrap();
         println!("{:?}", res);
         assert_eq!(
             res,
@@ -341,12 +403,45 @@ mod tests {
                     },
                     Order {
                         price: 30,
-                        creator: [2; 33],
+                        creator: [3; 33],
                         height: 42,
                         size: 5
                     }
                 ],
             }
         )
+    }
+
+    #[test]
+    fn order_placement_methods() {
+        let mut state = OrderBookState::new();
+        state.place_limit_sell(20, &[2; 33], 10, 42).unwrap();
+        state.place_limit_sell(20, &[2; 33], 12, 42).unwrap();
+        let res = state.place_limit_buy(25, &[3; 33], 11, 42).unwrap();
+        assert_eq!(
+            res,
+            PlaceResult {
+                total_fill_size: 20,
+                fills: vec![Order {
+                    price: 10,
+                    creator: [2; 33],
+                    size: 20,
+                    height: 42,
+                }]
+            }
+        );
+        let res = state.place_market_buy(5, &[3; 33]).unwrap();
+        assert_eq!(
+            res,
+            PlaceResult {
+                total_fill_size: 5,
+                fills: vec![Order {
+                    price: 12,
+                    creator: [2; 33],
+                    size: 5,
+                    height: 42,
+                }]
+            }
+        );
     }
 }
