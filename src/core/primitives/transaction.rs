@@ -14,6 +14,8 @@ pub enum Transaction {
     Transfer(TransferTransaction),
     Withdrawal(WithdrawalTransaction),
     Signature(SignatureTransaction),
+    PlaceOrder(PlaceOrderTransaction),
+    UpdateOrder(UpdateOrderTransaction),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -140,6 +142,28 @@ impl Sighash for WithdrawalTransaction {
         sighash_tx.signature = vec![];
         Ok(bincode::serialize(&sighash_tx)?)
     }
+}
+
+// Market transactions
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlaceOrderTransaction {
+    pub signature: Vec<u8>,
+    // TODO: Is there a good reason we're using a vec here instead of our crate's Address type?
+    pub creator: Vec<u8>,
+    pub size: u64,
+    pub price: Option<u64>,
+    pub side: crate::core::market::swaps::Direction,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UpdateOrderTransaction {
+    pub signature: Vec<u8>,
+    pub size: u64,
+    // These fields needed to construct order's index:
+    pub creator: Vec<u8>,
+    pub height: u64,
+    pub price: u64,
 }
 
 #[cfg(test)]
