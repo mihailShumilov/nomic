@@ -4,7 +4,7 @@ use rust_decimal::Decimal;
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 
-pub struct Number(Decimal);
+pub struct Number(pub Decimal);
 
 impl Deref for Number {
     type Target = Decimal;
@@ -23,7 +23,7 @@ impl DerefMut for Number {
 impl Encode for Number {
     fn encode_into<W: Write>(&self, dest: &mut W) -> Result<()> {
         let bytes = self.0.serialize();
-        dest.write(&bytes)?;
+        dest.write_all(&bytes)?;
         Ok(())
     }
 

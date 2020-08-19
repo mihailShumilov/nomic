@@ -37,6 +37,7 @@ simple-server = "0.4.0"
 tendermint = "0.15.0"
 tendermint-rpc = { version = "0.15.0", features = ["client"] }
 zip = "0.5.5"
+rust_decimal = "1.7.0"
 
 [dev-dependencies]
 protobuf = "2.10.1"
