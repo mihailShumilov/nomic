@@ -153,7 +153,7 @@ pub struct PlaceOrderTransaction {
     pub creator: Vec<u8>,
     pub size: u64,
     pub price: Option<u64>,
-    pub side: crate::core::market::swaps::Direction,
+    pub side: crate::core::market::Direction,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -164,6 +164,22 @@ pub struct UpdateOrderTransaction {
     pub creator: Vec<u8>,
     pub height: u64,
     pub price: u64,
+}
+
+impl Sighash for PlaceOrderTransaction {
+    fn sighash_input(&self) -> Result<Vec<u8>> {
+        let mut sighash_tx = self.clone();
+        sighash_tx.signature = vec![];
+        Ok(bincode::serialize(&sighash_tx)?)
+    }
+}
+
+impl Sighash for UpdateOrderTransaction {
+    fn sighash_input(&self) -> Result<Vec<u8>> {
+        let mut sighash_tx = self.clone();
+        sighash_tx.signature = vec![];
+        Ok(bincode::serialize(&sighash_tx)?)
+    }
 }
 
 #[cfg(test)]
