@@ -1,6 +1,6 @@
 use crate::core::primitives::Address;
 use crate::Result;
-use orga::{collections::Map, Decode, Encode, Entry, MapStore, Store};
+use orga::{collections::Map, state, Decode, Encode, Entry, MapStore, Prefixed, Shared, Store};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
@@ -10,6 +10,8 @@ pub struct OrderKey {
     pub creator: Address,
     pub height: u64,
 }
+// pub use bufstore::Map as BufStoreMap;
+// pub use bufstore::{BufStore, MapStore};
 #[derive(Encode, Decode, Debug)]
 pub struct OrderValue {
     pub size: u64,
@@ -117,16 +119,23 @@ impl Entry for Ask {
     }
 }
 
-pub struct OrderBookState {
+#[state]
+pub struct OrderBookState<S: Store> {
     bids: EntryMap<Bid>,
     asks: EntryMap<Ask>,
 }
 
-struct EntryMap<T: Entry> {
-    map: Map<MapStore, T::Key, T::Value>,
+struct EntryMap<S: Store, T: Entry> {
+    map: Map<S, T::Key, T::Value>,
 }
 
-impl<T: Entry> EntryMap<T> {
+impl<S: Store, T: Entry> orga::State<S> for EntryMap<S, T> {
+    fn wrap_store(store: S) -> orga::Result<Self> {
+        Ok(Self { map: store.wrap()? })
+    }
+}
+
+impl<S: Store, T: Entry> EntryMap<S, T> {
     pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
         self.map.insert(key, value)
@@ -136,14 +145,10 @@ impl<T: Entry> EntryMap<T> {
         let (key, _value) = entry.into_entry();
         self.map.delete(key)
     }
+}
 
-    pub fn new() -> Self {
-        Self {
-            map: MapStore::new().wrap().unwrap(),
-        }
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = T> + '_ {
+impl<'a, 'b: 'a, S: Store + orga::Iter<'a, 'b>, T: Entry> EntryMap<S, T> {
+    pub fn iter(&'a self) -> impl Iterator<Item = T> + '_ {
         let backing_iter = self.map.iter();
         EntryMapIter {
             backing_iter,
@@ -152,7 +157,7 @@ impl<T: Entry> EntryMap<T> {
     }
 }
 
-struct EntryMapIter<T, B>
+struct EntryMapIter<'a, 'b: 'a, T, B>
 where
     T: Entry,
     B: Iterator<Item = (T::Key, T::Value)>,
@@ -160,7 +165,7 @@ where
     backing_iter: B,
     phantom_t: PhantomData<T>,
 }
-impl<T, B> Iterator for EntryMapIter<T, B>
+impl<'a, 'b: 'a, T, B> Iterator for EntryMapIter<'a, 'b, T, B>
 where
     T: Entry,
     B: Iterator<Item = (T::Key, T::Value)>,
@@ -187,16 +192,12 @@ pub enum OrderOptions {
     Market { side: Side, size: u64 },
 }
 
-impl OrderBookState {
-    pub fn new() -> Self {
-        OrderBookState {
-            bids: EntryMap::new(),
-            asks: EntryMap::new(),
-        }
-    }
-
+impl<'a, 'b: 'a, S> OrderBookState<S>
+where
+    S: Store + orga::Iter<'a, 'b>,
+{
     fn match_orders<T>(
-        orders: &mut EntryMap<T>,
+        orders: &mut EntryMap<Prefixed<Shared<S>>, T>,
         size: u64,
         creator: &Address,
         side: &Side,
@@ -321,7 +322,7 @@ mod tests {
 
     #[test]
     fn ordering() {
-        let mut state = OrderBookState::new();
+        let mut state: OrderBookState<_> = MapStore::new().wrap().unwrap();
 
         let bid1 = Bid(Order {
             height: 42,
@@ -427,7 +428,7 @@ mod tests {
 
     #[test]
     fn order_placement_methods() {
-        let mut state = OrderBookState::new();
+        let mut state: OrderBookState<_> = MapStore::new().wrap().unwrap();
         state.place_limit_sell(20, &[2; 33], 10, 42).unwrap();
         state.place_limit_sell(20, &[2; 33], 12, 42).unwrap();
         let res = state.place_limit_buy(25, &[3; 33], 11, 42).unwrap();
@@ -460,7 +461,7 @@ mod tests {
 
     #[test]
     fn order_cancellation() {
-        let mut state = OrderBookState::new();
+        let mut state: OrderBookState<_> = MapStore::new().wrap().unwrap();
         state.place_limit_sell(10, &[2; 33], 10, 42).unwrap();
         state.place_limit_sell(10, &[2; 33], 9, 42).unwrap();
         state
