@@ -1,7 +1,7 @@
 use crate::core::bitcoin::bitcoin;
 use crate::core::primitives::Result;
 use bitcoin::PublicKey;
-use orga::{Decode, Encode, Terminated};
+use orga::encoding::{Decode, Encode, Terminated};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 

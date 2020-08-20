@@ -1,7 +1,7 @@
 use crate::core::primitives::{Address, Number};
 use crate::Result;
 use failure::bail;
-use orga::{Decode, Encode};
+use orga::encoding::{self as ed, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 

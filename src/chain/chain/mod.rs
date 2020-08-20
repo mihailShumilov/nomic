@@ -9,6 +9,7 @@ pub mod abci_server;
 pub mod spv;
 
 mod accounts;
+pub mod market;
 pub mod peg;
 #[cfg(test)]
 mod test_utils;

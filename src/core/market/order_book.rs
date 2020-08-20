@@ -1,6 +1,13 @@
 use crate::core::primitives::Address;
 use crate::Result;
-use orga::{collections::Map, state, Decode, Encode, Entry, MapStore, Prefixed, Shared, Store};
+use orga::{
+    collections::Entry,
+    collections::Map,
+    encoding::{self as ed, Decode, Encode},
+    macros::state,
+    state::State,
+    store::{Prefixed, Shared, Store},
+};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
@@ -129,7 +136,7 @@ struct EntryMap<S: Store, T: Entry> {
     map: Map<S, T::Key, T::Value>,
 }
 
-impl<S: Store, T: Entry> orga::State<S> for EntryMap<S, T> {
+impl<S: Store, T: Entry> State<S> for EntryMap<S, T> {
     fn wrap_store(store: S) -> orga::Result<Self> {
         Ok(Self { map: store.wrap()? })
     }
@@ -147,7 +154,7 @@ impl<S: Store, T: Entry> EntryMap<S, T> {
     }
 }
 
-impl<'a, 'b: 'a, S: Store + orga::Iter<'a, 'b>, T: Entry> EntryMap<S, T> {
+impl<'a, 'b: 'a, S: Store + orga::store::Iter<'a, 'b>, T: Entry> EntryMap<S, T> {
     pub fn iter(&'a self) -> impl Iterator<Item = T> + '_ {
         let backing_iter = self.map.iter();
         EntryMapIter {
@@ -194,7 +201,7 @@ pub enum OrderOptions {
 
 impl<'a, 'b: 'a, S> OrderBookState<S>
 where
-    S: Store + orga::Iter<'a, 'b>,
+    S: Store + orga::store::Iter<'a, 'b>,
 {
     fn match_orders<T>(
         orders: &mut EntryMap<Prefixed<Shared<S>>, T>,
@@ -319,6 +326,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use orga::store::{MapStore, Read};
 
     #[test]
     fn ordering() {
@@ -382,7 +390,7 @@ mod tests {
 
     #[test]
     fn partial_matching() {
-        let mut state = OrderBookState::new();
+        let mut state: OrderBookState<_> = MapStore::new().wrap().unwrap();
         state
             .asks
             .insert(Ask(Order {

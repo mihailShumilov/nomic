@@ -9,7 +9,11 @@ use bitcoin::consensus::encode as bitcoin_encode;
 use bitcoin::util::hash::bitcoin_merkle_root;
 use bitcoin::util::merkleblock::PartialMerkleTree;
 use lazy_static::lazy_static;
-use orga::{abci::messages::Header as TendermintHeader, MapStore, Store};
+use orga::{
+    abci::messages::Header as TendermintHeader,
+    store::{MapStore, Read, Write},
+    Store,
+};
 
 use protobuf::well_known_types::Timestamp;
 use secp256k1::{Secp256k1, SecretKey, SignOnly};

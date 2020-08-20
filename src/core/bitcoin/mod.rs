@@ -3,11 +3,12 @@ pub use bitcoincore_rpc;
 
 use std::io::{Read, Write};
 
+use crate::Result;
 use bitcoin::{
     hashes::{sha256d::Hash as Sha2Hash, Hash},
     BlockHeader,
 };
-use orga::{Decode, Encode, Result};
+use orga::encoding::{self as ed, Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]

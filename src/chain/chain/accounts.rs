@@ -67,6 +67,7 @@ fn unsafe_slice_to_address(slice: &[u8]) -> Address {
 mod tests {
     use super::super::test_utils::*;
     use super::*;
+    use orga::store::{Read, Write};
 
     #[test]
     #[should_panic(expected = "Transaction fee is too small")]

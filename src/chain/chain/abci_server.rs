@@ -7,7 +7,7 @@ use failure::bail;
 use merk::Merk;
 use orga::abci::{messages::*, ABCIStateMachine, Application};
 use orga::Result as OrgaResult;
-use orga::{merkstore::MerkStore, Store};
+use orga::{merk::MerkStore, Store};
 use std::collections::BTreeMap;
 use std::path::Path;
 

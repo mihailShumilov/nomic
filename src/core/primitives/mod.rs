@@ -6,7 +6,7 @@ pub use error::*;
 pub use number::*;
 pub mod transaction;
 use crate::core::bitcoin::{bitcoin, Script};
-use orga::{Decode, Encode};
+use orga::encoding::{self as ed, Decode, Encode};
 
 pub type Address = [u8; 33];
 pub type Signature = [u8; 64];

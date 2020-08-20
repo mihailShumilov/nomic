@@ -5,7 +5,10 @@ use crate::core::signatory_set::SignatorySetSnapshot;
 use failure::bail;
 use orga::{
     collections::{Deque, Set},
-    state, Decode, Encode, Store, Value, WrapperStore,
+    encoding::{self as ed, Decode, Encode},
+    macros::state,
+    state::{Value, WrapperStore},
+    Store,
 };
 
 #[state]

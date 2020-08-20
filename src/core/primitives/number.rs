@@ -1,5 +1,5 @@
 use crate::Result;
-use orga::{Decode, Encode};
+use orga::encoding::{self as ed, Decode, Encode};
 use rust_decimal::Decimal;
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};

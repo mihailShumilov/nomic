@@ -10,11 +10,13 @@ use bitcoin::Network::Testnet as bitcoin_network;
 use blocking::block_on;
 use failure::bail;
 use orga::{
-    abci::TendermintClient, merkstore::Client as MerkStoreClient, Read, Result as OrgaResult,
-    Store, Write,
+    abci::TendermintClient,
+    merk::Client as MerkStoreClient,
+    store::{Read, Write},
+    Result as OrgaResult, Store,
 };
 
-use std::cell::{RefCell};
+use std::cell::RefCell;
 use std::ops::DerefMut;
 use std::str::FromStr;
 use tendermint_rpc::Client as TendermintRpcClient;

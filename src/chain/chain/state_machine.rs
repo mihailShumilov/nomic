@@ -1,7 +1,7 @@
-use super::{accounts, peg, work, Action};
+use super::{accounts, market, peg, work, Action};
 use crate::core::primitives::transaction::Transaction;
 use crate::core::primitives::Result;
-use orga::{state, Store};
+use orga::{macros::state, Store};
 use std::collections::BTreeMap;
 
 #[state]
@@ -9,6 +9,7 @@ pub struct State<S: Store> {
     pub peg: peg::State,
     pub accounts: accounts::State,
     pub work: work::State,
+    pub market: market::State,
 }
 
 pub fn run<S: Store>(
@@ -38,6 +39,11 @@ pub fn run<S: Store>(
             // Validator transactions
             Transaction::WorkProof(tx) =>
                 work::handlers::work_proof_tx(&mut state.work, validators, tx),
+
+            // Market transactions
+            // Transaction::PlaceOrder(tx) => market::handlers::place_order_tx(&mut state.market, tx),
+            // Transaction::UpdateOrder(tx) => market::handlers::update_order_tx(&mut state.market, tx),
+            _ => failure::bail!("remove this line"),
         },
         Action::BeginBlock(header) => {
             peg::handlers::begin_block(&mut state.peg, validators, header)

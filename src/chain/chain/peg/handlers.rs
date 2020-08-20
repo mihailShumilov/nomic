@@ -428,7 +428,10 @@ mod tests {
     use crate::core::signatory_set::{Signatory, SignatorySet, SignatorySetSnapshot};
     use bitcoin::Network::Testnet as bitcoin_network;
     use lazy_static::lazy_static;
-    use orga::{abci::messages::Header as TendermintHeader, MapStore};
+    use orga::{
+        abci::messages::Header as TendermintHeader,
+        store::{MapStore, Read, Write},
+    };
     use protobuf::well_known_types::Timestamp;
     use signatories_from_validators;
 
