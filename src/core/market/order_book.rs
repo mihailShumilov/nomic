@@ -17,8 +17,6 @@ pub struct OrderKey {
     pub creator: Address,
     pub height: u64,
 }
-// pub use bufstore::Map as BufStoreMap;
-// pub use bufstore::{BufStore, MapStore};
 #[derive(Encode, Decode, Debug)]
 pub struct OrderValue {
     pub size: u64,
@@ -154,28 +152,28 @@ impl<S: Store, T: Entry> EntryMap<S, T> {
     }
 }
 
-impl<'a, 'b: 'a, S: Store + orga::store::Iter<'a, 'b>, T: Entry> EntryMap<S, T> {
-    pub fn iter(&'a self) -> impl Iterator<Item = T> + '_ {
+impl<S: Store + orga::store::Iter, T: Entry> EntryMap<S, T> {
+    pub fn iter(&self) -> EntryMapIter<'_, T, S> {
         let backing_iter = self.map.iter();
         EntryMapIter {
             backing_iter,
-            phantom_t: PhantomData,
+            phantom_a: std::marker::PhantomData
         }
     }
 }
 
-struct EntryMapIter<'a, 'b: 'a, T, B>
+struct EntryMapIter<'a, T, S>
 where
     T: Entry,
-    B: Iterator<Item = (T::Key, T::Value)>,
+    S: orga::store::Read + orga::store::Iter
 {
-    backing_iter: B,
-    phantom_t: PhantomData<T>,
+    backing_iter: orga::collections::map::Iter<'a, S::Iter<'a>, T::Key, T::Value>,
+    phantom_a: std::marker::PhantomData<&'a ()>
 }
-impl<'a, 'b: 'a, T, B> Iterator for EntryMapIter<'a, 'b, T, B>
+impl<T, S> Iterator for EntryMapIter<'_, T, S>
 where
     T: Entry,
-    B: Iterator<Item = (T::Key, T::Value)>,
+    S: orga::store::Read + orga::store::Iter
 {
     type Item = T;
 
@@ -189,7 +187,7 @@ pub struct PlaceResult {
     pub total_fill_size: u64,
     pub fills: Vec<Order>,
 }
-
+#[derive(Copy, Clone)]
 pub enum Side {
     Buy,
     Sell,
@@ -199,66 +197,10 @@ pub enum OrderOptions {
     Market { side: Side, size: u64 },
 }
 
-impl<'a, 'b: 'a, S> OrderBookState<S>
+impl<S> OrderBookState<S>
 where
-    S: Store + orga::store::Iter<'a, 'b>,
+    S: Store + orga::store::Iter,
 {
-    fn match_orders<T>(
-        orders: &mut EntryMap<Prefixed<Shared<S>>, T>,
-        size: u64,
-        creator: &Address,
-        side: &Side,
-        price: Option<u64>,
-    ) -> Result<PlaceResult>
-    where
-        T: Deref<Target = Order> + DerefMut + Entry + Copy,
-    {
-        // TODO: order cost limiting
-        let mut result = PlaceResult::default();
-        let mut orders_to_delete = vec![];
-        let mut order_to_insert = None;
-        for mut next_order in orders.iter() {
-            let remaining_size = size - result.total_fill_size;
-
-            match (side, price) {
-                (Side::Buy, Some(price)) if price < next_order.price => break,
-                (Side::Sell, Some(price)) if price > next_order.price => break,
-                _ => (),
-            };
-            if &next_order.creator == creator {
-                continue;
-            }
-            if remaining_size >= next_order.size {
-                // Completely filling the ask, removing it from order book.
-                result.total_fill_size += next_order.size;
-                result.fills.push(*next_order);
-                // orders.delete(next_order)?;
-                orders_to_delete.push(next_order);
-            } else {
-                // Partially filling the ask, updating it on the order book.
-                result.total_fill_size += remaining_size;
-                let mut partial_fill = next_order;
-                partial_fill.size = remaining_size;
-                result.fills.push(*partial_fill);
-                next_order.size -= remaining_size;
-                order_to_insert = Some(next_order);
-            }
-
-            if size == result.total_fill_size {
-                break;
-            }
-        }
-
-        for order in orders_to_delete {
-            orders.delete(order)?;
-        }
-        if let Some(order) = order_to_insert {
-            orders.insert(order)?;
-        }
-
-        Ok(result)
-    }
-
     pub fn place_limit_sell(
         &mut self,
         size: u64,
@@ -266,8 +208,7 @@ where
         price: u64,
         height: u64,
     ) -> Result<PlaceResult> {
-        let match_result =
-            Self::match_orders(&mut self.bids, size, creator, &Side::Sell, Some(price))?;
+       let match_result = match_orders(&mut self.bids, size, creator, Side::Sell, Some(price))?;
 
         // Place unfilled part of order into order book.
         self.asks.insert(Ask(Order {
@@ -288,7 +229,7 @@ where
         height: u64,
     ) -> Result<PlaceResult> {
         let match_result =
-            Self::match_orders(&mut self.asks, size, creator, &Side::Buy, Some(price))?;
+            match_orders(&mut self.asks, size, creator, Side::Buy, Some(price))?;
 
         // Place unfilled part of order into order book.
         self.bids.insert(Bid(Order {
@@ -302,11 +243,11 @@ where
     }
 
     pub fn place_market_buy(&mut self, size: u64, creator: &Address) -> Result<PlaceResult> {
-        Self::match_orders(&mut self.asks, size, creator, &Side::Buy, None)
+        match_orders(&mut self.asks, size, creator, Side::Buy, None)
     }
 
     pub fn place_market_sell(&mut self, size: u64, creator: &Address) -> Result<PlaceResult> {
-        Self::match_orders(&mut self.bids, size, creator, &Side::Sell, None)
+        match_orders(&mut self.bids, size, creator, Side::Sell, None)
     }
 
     pub fn cancel_order(&mut self, side: Side, key: OrderKey) -> Result<()> {
@@ -321,6 +262,63 @@ where
             Side::Buy => self.bids.delete(Bid(order)),
         }
     }
+}
+
+fn match_orders<S, T>(
+    orders: &mut EntryMap<S, T>,
+    size: u64,
+    creator: &Address,
+    side: Side,
+    price: Option<u64>,
+) -> Result<PlaceResult>
+    where
+        S: Store + orga::store::Iter,
+        T: DerefMut<Target = Order> + Entry + Copy
+{
+    // TODO: order cost limiting
+    let mut result = PlaceResult::default();
+    let mut orders_to_delete = vec![];
+    let mut order_to_insert = None;
+    for mut next_order in orders.iter() {
+        let remaining_size = size - result.total_fill_size;
+
+        match (side, price) {
+            (Side::Buy, Some(price)) if price < next_order.price => break,
+            (Side::Sell, Some(price)) if price > next_order.price => break,
+            _ => (),
+        };
+        if &next_order.creator == creator {
+            continue;
+        }
+        if remaining_size >= next_order.size {
+            // Completely filling the ask, removing it from order book.
+            result.total_fill_size += next_order.size;
+            result.fills.push(*next_order);
+            // orders.delete(next_order)?;
+            orders_to_delete.push(next_order);
+        } else {
+            // Partially filling the ask, updating it on the order book.
+            result.total_fill_size += remaining_size;
+            let mut partial_fill = next_order;
+            partial_fill.size = remaining_size;
+            result.fills.push(*partial_fill);
+            next_order.size -= remaining_size;
+            order_to_insert = Some(next_order);
+        }
+
+        if size == result.total_fill_size {
+            break;
+        }
+    }
+
+    for order in orders_to_delete {
+        orders.delete(order)?;
+    }
+    if let Some(order) = order_to_insert {
+        orders.insert(order)?;
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]
