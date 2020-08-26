@@ -132,7 +132,10 @@ fn main() {
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
             info!("Starting signatory process");
-            nomic_signatory::start(nomic_home).unwrap();
+            loop {
+                nomic_signatory::start(nomic_home.clone());
+                std::thread::sleep(std::time::Duration::from_secs(60));
+            }
         }
         SubCommand::Worker(_) => {
             default_log_level("info");
