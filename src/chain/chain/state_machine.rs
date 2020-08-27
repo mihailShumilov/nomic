@@ -16,6 +16,7 @@ pub fn run<S: Store>(
     store: S,
     action: Action,
     validators: &mut BTreeMap<Vec<u8>, u64>,
+    height: u64,
 ) -> Result<()> {
     let mut state: State<_> = store.wrap()?;
 
@@ -41,7 +42,7 @@ pub fn run<S: Store>(
                 work::handlers::work_proof_tx(&mut state.work, validators, tx),
 
             // Market transactions
-            // Transaction::PlaceOrder(tx) => market::handlers::place_order_tx(&mut state.market, tx),
+            Transaction::PlaceOrder(tx) => market::handlers::place_order_tx(&mut state.market, &mut state.accounts, tx, height),
             // Transaction::UpdateOrder(tx) => market::handlers::update_order_tx(&mut state.market, tx),
             _ => failure::bail!("remove this line"),
         },

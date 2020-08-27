@@ -1,5 +1,6 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 #![feature(negative_impls)]
+
 #[macro_use]
 extern crate rocket;
 pub mod chain;

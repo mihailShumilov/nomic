@@ -1585,11 +1585,12 @@ dependencies = [
 [[package]]
 name = "merk"
 version = "1.0.0"
-source = "git+https://github.com/nomic-io/merk?rev=114f5a2415bb2ce5e51501d4eb2a56e5726708a6#114f5a2415bb2ce5e51501d4eb2a56e5726708a6"
+source = "git+https://github.com/nomic-io/merk?rev=104535c681610bb1a7d687de45ea1040aab590fd#104535c681610bb1a7d687de45ea1040aab590fd"
 dependencies = [
  "blake2-rfc",
  "byteorder",
  "colored",
+ "ed",
  "failure",
  "hex 0.4.2",
  "jemallocator",
@@ -1730,7 +1731,6 @@ dependencies = [
  "is_executable",
  "lazy_static",
  "log 0.4.11",
- "merk",
  "orga",
  "pretty_env_logger",
  "protobuf",
@@ -1849,7 +1849,8 @@ dependencies = [
 
 [[package]]
 name = "orga"
-version = "0.1.8"
+version = "0.1.10"
+source = "git+https://github.com/nomic-io/orga?rev=7551371738ed9a179900724a4286a10bb65d3bdb#7551371738ed9a179900724a4286a10bb65d3bdb"
 dependencies = [
  "abci2",
  "blocking",
@@ -1866,6 +1867,7 @@ dependencies = [
 [[package]]
 name = "orga-macros"
 version = "0.1.0"
+source = "git+https://github.com/nomic-io/orga?rev=7551371738ed9a179900724a4286a10bb65d3bdb#7551371738ed9a179900724a4286a10bb65d3bdb"
 dependencies = [
  "proc-macro2 1.0.19",
  "quote 1.0.7",

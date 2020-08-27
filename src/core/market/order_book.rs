@@ -126,8 +126,8 @@ impl Entry for Ask {
 
 #[state]
 pub struct OrderBookState<S: Store> {
-    bids: EntryMap<Bid>,
-    asks: EntryMap<Ask>,
+    pub bids: EntryMap<Bid>,
+    pub asks: EntryMap<Ask>,
 }
 
 struct EntryMap<S: Store, T: Entry> {
