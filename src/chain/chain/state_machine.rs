@@ -1,7 +1,7 @@
 use super::{accounts, market, peg, work, Action};
 use crate::core::primitives::transaction::Transaction;
 use crate::core::primitives::Result;
-use orga::{macros::state, Store};
+use orga::{macros::state, store::Iter, Store};
 use std::collections::BTreeMap;
 
 #[state]
@@ -12,7 +12,7 @@ pub struct State<S: Store> {
     pub market: market::State,
 }
 
-pub fn run<S: Store>(
+pub fn run<S: Store + Iter>(
     store: S,
     action: Action,
     validators: &mut BTreeMap<Vec<u8>, u64>,
@@ -42,7 +42,7 @@ pub fn run<S: Store>(
                 work::handlers::work_proof_tx(&mut state.work, validators, tx),
 
             // Market transactions
-            Transaction::PlaceOrder(tx) => market::handlers::place_order_tx(&mut state.market, &mut state.accounts, tx, height),
+            Transaction::PlaceOrder(tx) => market::handlers::place_order_tx(&mut state.market, &mut state.accounts, height, tx),
             // Transaction::UpdateOrder(tx) => market::handlers::update_order_tx(&mut state.market, tx),
             _ => failure::bail!("remove this line"),
         },

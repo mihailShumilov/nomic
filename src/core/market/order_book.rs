@@ -6,9 +6,8 @@ use orga::{
     encoding::{self as ed, Decode, Encode},
     macros::state,
     state::State,
-    store::{Prefixed, Shared, Store},
+    Store,
 };
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 #[derive(Encode, Decode, Debug)]
@@ -30,7 +29,7 @@ pub struct Order {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
-pub struct Bid(Order);
+pub struct Bid(pub Order);
 
 impl Deref for Bid {
     type Target = Order;
@@ -78,7 +77,7 @@ impl Entry for Bid {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
-pub struct Ask(Order);
+pub struct Ask(pub Order);
 
 impl Deref for Ask {
     type Target = Order;
@@ -130,7 +129,7 @@ pub struct OrderBookState<S: Store> {
     pub asks: EntryMap<Ask>,
 }
 
-struct EntryMap<S: Store, T: Entry> {
+pub struct EntryMap<S: Store, T: Entry> {
     map: Map<S, T::Key, T::Value>,
 }
 
@@ -157,23 +156,23 @@ impl<S: Store + orga::store::Iter, T: Entry> EntryMap<S, T> {
         let backing_iter = self.map.iter();
         EntryMapIter {
             backing_iter,
-            phantom_a: std::marker::PhantomData
+            phantom_a: std::marker::PhantomData,
         }
     }
 }
 
-struct EntryMapIter<'a, T, S>
+pub struct EntryMapIter<'a, T, S>
 where
     T: Entry,
-    S: orga::store::Read + orga::store::Iter
+    S: orga::store::Read + orga::store::Iter,
 {
     backing_iter: orga::collections::map::Iter<'a, S::Iter<'a>, T::Key, T::Value>,
-    phantom_a: std::marker::PhantomData<&'a ()>
+    phantom_a: std::marker::PhantomData<&'a ()>,
 }
 impl<T, S> Iterator for EntryMapIter<'_, T, S>
 where
     T: Entry,
-    S: orga::store::Read + orga::store::Iter
+    S: orga::store::Read + orga::store::Iter,
 {
     type Item = T;
 
@@ -208,7 +207,7 @@ where
         price: u64,
         height: u64,
     ) -> Result<PlaceResult> {
-       let match_result = match_orders(&mut self.bids, size, creator, Side::Sell, Some(price))?;
+        let match_result = match_orders(&mut self.bids, size, creator, Side::Sell, Some(price))?;
 
         // Place unfilled part of order into order book.
         self.asks.insert(Ask(Order {
@@ -228,8 +227,7 @@ where
         price: u64,
         height: u64,
     ) -> Result<PlaceResult> {
-        let match_result =
-            match_orders(&mut self.asks, size, creator, Side::Buy, Some(price))?;
+        let match_result = match_orders(&mut self.asks, size, creator, Side::Buy, Some(price))?;
 
         // Place unfilled part of order into order book.
         self.bids.insert(Bid(Order {
@@ -271,9 +269,9 @@ fn match_orders<S, T>(
     side: Side,
     price: Option<u64>,
 ) -> Result<PlaceResult>
-    where
-        S: Store + orga::store::Iter,
-        T: DerefMut<Target = Order> + Entry + Copy
+where
+    S: Store + orga::store::Iter,
+    T: DerefMut<Target = Order> + Entry + Copy,
 {
     // TODO: order cost limiting
     let mut result = PlaceResult::default();

@@ -1,13 +1,21 @@
-use super::State as MarketState;
 use super::super::accounts::State as AccountState;
-use crate::Result;
-use orga::{Store, store::{MapStore, Read, Write}};
+use super::super::SECP;
+use super::State as MarketState;
 use crate::core::market::Direction;
 use crate::core::primitives::{transaction::PlaceOrderTransaction, Account, Address};
-use super::super::SECP;
+use crate::Result;
 use failure::bail;
+use orga::{
+    store::{Iter, MapStore, Read, Write},
+    Store,
+};
 
-pub fn place_order_tx<S: Store>(market: &mut MarketState<S>, accounts: &mut AccountState<S>, height: u64, tx: PlaceOrderTransaction) -> Result<()> {
+pub fn place_order_tx<S: Store + Iter>(
+    market: &mut MarketState<S>,
+    accounts: &mut AccountState<S>,
+    height: u64,
+    tx: PlaceOrderTransaction,
+) -> Result<()> {
     if tx.fee_amount < 1000 {
         bail!("Transaction fee is too small");
     }
@@ -15,6 +23,7 @@ pub fn place_order_tx<S: Store>(market: &mut MarketState<S>, accounts: &mut Acco
     if tx.creator.len() != 33 {
         bail!("Invalid creator address");
     }
+    let creator = unsafe_slice_to_address(&tx.creator[..]);
     if !tx.verify_signature(&SECP)? {
         bail!("Invalid signature");
     }
@@ -26,19 +35,19 @@ pub fn place_order_tx<S: Store>(market: &mut MarketState<S>, accounts: &mut Acco
     if tx.nonce != creator_account.nonce {
         bail!("Invalid account nonce");
     }
-
     let place_result = match (tx.side, tx.price) {
-        (Direction::Long, Some(price)) => market.orders.place_limit_buy(tx.size, &tx.creator, price, height)?,
-        (Direction::Short, Some(price)) => market.orders.place_limit_sell(tx.size, &tx.creator, price, height)?,
-        (Direction::Long, None) => market.orders.place_market_buy(tx.size, &tx.creator)?,
-        (Direction::Short, None) => market.orders.place_limit_buy(tx.size, &tx.creator)?,
+        (Direction::Long, Some(price)) => market
+            .orders
+            .place_limit_buy(tx.size, &creator, price, height)?,
+        (Direction::Short, Some(price)) => market
+            .orders
+            .place_limit_sell(tx.size, &creator, price, height)?,
+        (Direction::Long, None) => market.orders.place_market_buy(tx.size, &creator)?,
+        (Direction::Short, None) => market.orders.place_market_sell(tx.size, &creator)?,
     };
-    
-    for fill in place_result.fills.iter() {
-        
-    }
-    // TODO: Check that fill cost is less than account balance
 
+    for fill in place_result.fills.iter() {}
+    // TODO: Check that fill cost is less than account balance
 
     creator_account.nonce += 1;
     Ok(())
@@ -51,13 +60,12 @@ fn unsafe_slice_to_address(slice: &[u8]) -> Address {
 }
 #[cfg(test)]
 mod tests {
+    use super::super::super::test_utils;
     use super::*;
     use crate::core::primitives::transaction::Transaction;
-    use super::super::super::test_utils;
 
-    
     #[test]
-    fn place_order_ok(){
+    fn place_order_ok() {
         let (privkey, pubkey) = test_utils::create_keypair(2);
         let mut tx = PlaceOrderTransaction {
             creator: pubkey.serialize().to_vec(),
@@ -71,11 +79,18 @@ mod tests {
         tx.signature = test_utils::sign(&mut tx, privkey);
         let mut account_state: AccountState<_> = MapStore::new().wrap().unwrap();
         let mut market_state: MarketState<_> = MapStore::new().wrap().unwrap();
-        account_state.insert(pubkey.serialize(), Account { nonce: 0, balance: 100000}).unwrap();
-        place_order_tx(&mut market_state, &mut account_state, tx).unwrap();
-       
-        // TODO: More state assertions
+        account_state
+            .insert(
+                pubkey.serialize(),
+                Account {
+                    nonce: 0,
+                    balance: 100000,
+                },
+            )
+            .unwrap();
+        place_order_tx(&mut market_state, &mut account_state, 42, tx).unwrap();
 
+        // TODO: More state assertions
     }
 
     #[test]
@@ -95,8 +110,16 @@ mod tests {
         tx.signature[10] ^= 1;
         let mut account_state: AccountState<_> = MapStore::new().wrap().unwrap();
         let mut market_state: MarketState<_> = MapStore::new().wrap().unwrap();
-        account_state.insert(pubkey.serialize(), Account { nonce: 0, balance: 100000}).unwrap();
-        place_order_tx(&mut market_state, &mut account_state, tx).unwrap();
+        account_state
+            .insert(
+                pubkey.serialize(),
+                Account {
+                    nonce: 0,
+                    balance: 100000,
+                },
+            )
+            .unwrap();
+        place_order_tx(&mut market_state, &mut account_state, 42, tx).unwrap();
     }
     #[test]
     #[should_panic(expected = "Account does not exist")]
@@ -114,6 +137,6 @@ mod tests {
         tx.signature = test_utils::sign(&mut tx, privkey);
         let mut account_state: AccountState<_> = MapStore::new().wrap().unwrap();
         let mut market_state: MarketState<_> = MapStore::new().wrap().unwrap();
-        place_order_tx(&mut market_state, &mut account_state, tx).unwrap();
+        place_order_tx(&mut market_state, &mut account_state, 42, tx).unwrap();
     }
 }
