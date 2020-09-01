@@ -23,7 +23,7 @@ is_executable = "0.1.2"
 lazy_static = "1.4.0"
 log = "0.4.8"
 # merk = { git = "https://github.com/nomic-io/merk", rev = "114f5a2415bb2ce5e51501d4eb2a56e5726708a6" }
-orga = { git = "https://github.com/nomic-io/orga" , rev = "7551371738ed9a179900724a4286a10bb65d3bdb", features = [ "merk", "abci" ] }
+orga = { git = "https://github.com/nomic-io/orga" , rev = "d1d017597d8ee78b8afd64743cd28d3f63b71897", features = [ "merk", "abci" ] }
 # orga = { path = "../orga",  features = [ "merk", "abci" ] }
 pretty_env_logger = "0.4.0"
 rand = "=0.6"
