@@ -12,7 +12,7 @@ use failure::bail;
 use orga::{
     abci::TendermintClient,
     merk::Client as MerkStoreClient,
-    store::{Read, Write},
+    store::{Entry, Iter, Read, Write},
     Result as OrgaResult, Store,
 };
 
@@ -49,6 +49,23 @@ impl Write for RemoteStore {
         panic!("Delete method should not be called on a RemoteStore");
     }
 }
+
+pub struct NullIter<'a>(std::marker::PhantomData<&'a ()>);
+impl<'a> Iterator for NullIter<'a> {
+    type Item = Entry<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        None
+    }
+}
+impl Iter for RemoteStore {
+    type Iter<'a> = NullIter<'a>;
+    fn iter_from(&self, _start: &[u8]) -> NullIter {
+        panic!("Iterator should not be created on a RemoteStore");
+    }
+}
+
+pub struct ClientStore(RefCell<RemoteStore>);
 
 pub struct Client {
     pub tendermint_rpc: TendermintRpcClient,
