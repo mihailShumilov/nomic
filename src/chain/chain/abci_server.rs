@@ -3,22 +3,25 @@
 use super::state_machine::{initialize, run};
 use super::Action;
 use crate::core::primitives::transaction::Transaction;
+use crate::Result;
 use failure::bail;
 use orga::abci::{messages::*, ABCIStateMachine, Application};
-use orga::Result as OrgaResult;
-use orga::{merk::{MerkStore, merk::Merk}, Store};
+use orga::{
+    merk::{merk::Merk, MerkStore},
+    store::Iter,
+    Store,
+};
 use std::collections::BTreeMap;
 use std::path::Path;
 
 struct App;
 
-
 impl Application for App {
-    fn init_chain<S: Store>(
+    fn init_chain<S: Store + Iter>(
         &self,
         mut store: S,
         req: RequestInitChain,
-    ) -> OrgaResult<ResponseInitChain> {
+    ) -> Result<ResponseInitChain> {
         let mut validators = BTreeMap::<Vec<u8>, u64>::new();
         for validator in req.get_validators() {
             let pub_key = validator.get_pub_key().get_data().to_vec();
@@ -32,10 +35,14 @@ impl Application for App {
         Ok(ResponseInitChain::new())
     }
 
-    fn check_tx<S: Store>(&self, mut store: S, req: RequestCheckTx) -> OrgaResult<ResponseCheckTx> {
+    fn check_tx<S: Store + Iter>(
+        &self,
+        mut store: S,
+        req: RequestCheckTx,
+    ) -> Result<ResponseCheckTx> {
         let tx = serde_json::from_slice::<Transaction>(req.get_tx());
         let mut validators = read_validators(&mut store);
-        let height = u64::from_be_bytes(store.get(b"height")?.unwrap().into());
+        let height = read_height(&store)?;
 
         match tx {
             Ok(tx) => match run(&mut store, Action::Transaction(tx), &mut validators, height) {
@@ -54,14 +61,14 @@ impl Application for App {
         }
     }
 
-    fn deliver_tx<S: Store>(
+    fn deliver_tx<S: Store + Iter>(
         &self,
         mut store: S,
         req: RequestDeliverTx,
-    ) -> OrgaResult<ResponseDeliverTx> {
+    ) -> Result<ResponseDeliverTx> {
         let tx = serde_json::from_slice::<Transaction>(req.get_tx());
         let mut validators = read_validators(&mut store);
-        let height = u64::from_be_bytes(store.get(b"height")?.unwrap().into());
+        let height = read_height(&store)?;
 
         match tx {
             Ok(tx) => match run(&mut store, Action::Transaction(tx), &mut validators, height) {
@@ -78,22 +85,28 @@ impl Application for App {
         }
     }
 
-    fn begin_block<S: Store>(
+    fn begin_block<S: Store + Iter>(
         &self,
         mut store: S,
         req: RequestBeginBlock,
-    ) -> OrgaResult<ResponseBeginBlock> {
+    ) -> Result<ResponseBeginBlock> {
         let header = req.get_header();
-        store.put(b"height".to_vec(), header.height)?;
-        let action = Action::BeginBlock(header);
+        let height = header.height;
+        let height_bytes = height.to_be_bytes();
+        store.put(b"height".to_vec(), height_bytes.to_vec())?;
+        let action = Action::BeginBlock(header.clone());
         let mut validators = read_validators(&mut store);
-        
-        run(&mut store, action, &mut validators, req.get_header().height)?;
+
+        run(&mut store, action, &mut validators, height as u64)?;
         write_validators(&mut store, validators)?;
         Ok(Default::default())
     }
 
-    fn end_block<S: Store>(&self, store: S, _req: RequestEndBlock) -> OrgaResult<ResponseEndBlock> {
+    fn end_block<S: Store + Iter>(
+        &self,
+        store: S,
+        _req: RequestEndBlock,
+    ) -> Result<ResponseEndBlock> {
         let validators = read_validators(store);
         let mut validator_updates: Vec<ValidatorUpdate> = Vec::new();
         for (pub_key_bytes, power) in validators {
@@ -112,7 +125,13 @@ impl Application for App {
     }
 }
 
-fn write_validators<S: Store>(mut store: S, validators: BTreeMap<Vec<u8>, u64>) -> OrgaResult<()> {
+fn read_height<S: Store>(store: &S) -> Result<u64> {
+    let mut height_bytes = [0 as u8; 8];
+    height_bytes.copy_from_slice(&store.get(b"height")?.unwrap()[..]);
+    Ok(u64::from_be_bytes(height_bytes))
+}
+
+fn write_validators<S: Store>(mut store: S, validators: BTreeMap<Vec<u8>, u64>) -> Result<()> {
     let validator_map_bytes =
         bincode::serialize(&validators).expect("Failed to serialize validator map");
     store.put(b"validators".to_vec(), validator_map_bytes)
@@ -122,11 +141,10 @@ fn read_validators<S: Store>(store: S) -> BTreeMap<Vec<u8>, u64> {
         .get(b"validators")
         .expect("Failed to read validator map bytes from store")
         .expect("Validator map was not written to store");
-    let validators: Result<BTreeMap<Vec<u8>, u64>, bincode::Error> =
+    let validators: std::result::Result<BTreeMap<Vec<u8>, u64>, bincode::Error> =
         bincode::deserialize(&validator_map_bytes);
     validators.expect("Failed to deserialize validator map")
 }
-
 
 pub fn start<P: AsRef<Path>>(nomic_home: P) {
     let merk_path = nomic_home.as_ref().join("merk.db");
