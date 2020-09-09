@@ -5,10 +5,25 @@ use orga::encoding::{self as ed, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Copy)]
 pub enum Direction {
     Long,
     Short,
+}
+
+impl Direction {
+    pub fn other(&self) -> Self {
+        match self {
+            Self::Long => Self::Short,
+            Self::Short => Self::Long,
+        }
+    }
+}
+
+impl Default for Direction {
+    fn default() -> Self {
+        Self::Long
+    }
 }
 
 impl Encode for Direction {
