@@ -195,12 +195,11 @@ pub fn create_sender<S: Store>(
 ) -> Sender {
     let (privkey, pubkey) = create_keypair(1);
     let address = pubkey.serialize().to_vec();
-
+    let mut account = Account::default();
+    account.balance = balance;
+    account.nonce = nonce;
     accounts
-        .insert(
-            unsafe_slice_to_address(address.as_slice()),
-            Account { balance, nonce },
-        )
+        .insert(unsafe_slice_to_address(address.as_slice()), account)
         .unwrap();
 
     Sender { address, privkey }

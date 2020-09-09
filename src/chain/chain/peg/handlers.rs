@@ -692,10 +692,7 @@ mod tests {
         // check recipient balance
         assert_eq!(
             account_state.get([123; 33]).unwrap().unwrap(),
-            Account {
-                balance: 100_000_000,
-                nonce: 0
-            }
+            Account::new(100_000_000)
         );
     }
 
@@ -723,10 +720,7 @@ mod tests {
                 .get(unsafe_slice_to_address(&sender.address[..]))
                 .unwrap()
                 .unwrap(),
-            Account {
-                balance: 234,
-                nonce: 1,
-            }
+            Account::new(234).with_nonce(1)
         );
         assert_eq!(peg_state.pending_withdrawals.get(0).unwrap().value, 1000);
     }

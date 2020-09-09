@@ -213,20 +213,14 @@ mod tests {
                 .get(unsafe_slice_to_address(&receiver_address[..]))
                 .unwrap()
                 .unwrap(),
-            Account {
-                balance: 100,
-                nonce: 0
-            }
+            Account::new(100)
         );
         assert_eq!(
             accounts
                 .get(unsafe_slice_to_address(&sender.address[..]))
                 .unwrap()
                 .unwrap(),
-            Account {
-                balance: 134,
-                nonce: 1
-            }
+            Account::new(134).with_nonce(1)
         );
     }
     // TODO: test for transfer to self
