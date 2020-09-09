@@ -1,4 +1,4 @@
-use crate::core::primitives::Address;
+use crate::core::primitives::{Address, Number};
 use crate::Result;
 use orga::{
     collections::Entry,
@@ -195,6 +195,7 @@ where
 pub struct PlaceResult {
     pub total_fill_size: u64,
     pub fills: Vec<Order>,
+    pub new_order: Option<Order>,
 }
 #[derive(Copy, Clone)]
 pub enum Side {
@@ -217,15 +218,20 @@ where
         price: u64,
         height: u64,
     ) -> Result<PlaceResult> {
-        let match_result = match_orders(&mut self.bids, size, creator, Side::Sell, Some(price))?;
+        let mut match_result =
+            match_orders(&mut self.bids, size, creator, Side::Sell, Some(price))?;
 
-        // Place unfilled part of order into order book.
-        self.asks.insert(Ask(Order {
-            price,
-            creator: *creator,
-            height,
-            size: size - match_result.total_fill_size,
-        }))?;
+        if match_result.total_fill_size < size {
+            let new_order = Order {
+                price,
+                creator: *creator,
+                height,
+                size: size - match_result.total_fill_size,
+            };
+            match_result.new_order = Some(new_order);
+            // Place unfilled part of order into order book.
+            self.asks.insert(Ask(new_order))?;
+        }
 
         Ok(match_result)
     }
@@ -237,15 +243,19 @@ where
         price: u64,
         height: u64,
     ) -> Result<PlaceResult> {
-        let match_result = match_orders(&mut self.asks, size, creator, Side::Buy, Some(price))?;
+        let mut match_result = match_orders(&mut self.asks, size, creator, Side::Buy, Some(price))?;
 
-        // Place unfilled part of order into order book.
-        self.bids.insert(Bid(Order {
-            price,
-            creator: *creator,
-            height,
-            size: size - match_result.total_fill_size,
-        }))?;
+        if match_result.total_fill_size < size {
+            let new_order = Order {
+                price,
+                creator: *creator,
+                height,
+                size: size - match_result.total_fill_size,
+            };
+            match_result.new_order = Some(new_order);
+            // Place unfilled part of order into order book.
+            self.bids.insert(Bid(new_order))?;
+        }
 
         Ok(match_result)
     }
@@ -436,6 +446,8 @@ mod tests {
                         size: 5
                     }
                 ],
+
+                new_order: None,
             }
         )
     }
@@ -455,7 +467,8 @@ mod tests {
                     creator: [2; 33],
                     size: 20,
                     height: 42,
-                }]
+                }],
+                new_order: None,
             }
         );
         let res = state.place_market_buy(5, &[3; 33]).unwrap();
@@ -468,7 +481,8 @@ mod tests {
                     creator: [2; 33],
                     size: 5,
                     height: 42,
-                }]
+                }],
+                new_order: None,
             }
         );
     }
@@ -499,6 +513,7 @@ mod tests {
                     size: 10,
                     creator: [2; 33],
                 }],
+                new_order: None,
             },
         );
     }

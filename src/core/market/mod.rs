@@ -1,5 +1,5 @@
 mod market;
-mod order_book;
+pub mod order_book;
 mod swaps;
 
 pub use order_book::*;
