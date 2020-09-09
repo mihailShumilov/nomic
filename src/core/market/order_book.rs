@@ -27,6 +27,16 @@ pub struct Order {
     pub height: u64,
     pub size: u64,
 }
+// TODO: move this somewhere else
+pub const SATOSHIS_PER_BITCOIN: u64 = 100_000_000;
+impl Order {
+    pub fn cost(&self) -> u64 {
+        // price is cents per bitcoin
+        // size is cents
+        // cost is satoshis
+        self.size * SATOSHIS_PER_BITCOIN / self.price
+    }
+}
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
 pub struct Bid(pub Order);
