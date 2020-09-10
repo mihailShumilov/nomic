@@ -4,7 +4,9 @@ use crate::Result;
 use failure::bail;
 use orga::encoding::{self as ed, Decode, Encode};
 use std::cmp::max;
-const PRICE_PRECISION: u64 = 1e8 as u64;
+
+const PRICE_PRECISION: u64 = 100_000_000;
+const LEVERAGE_PRECISION: u64 = 100;
 
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq, Copy)]
 pub struct Account {
@@ -22,16 +24,19 @@ pub struct Account {
     // Price is cents/bitcoin
     pub entry_price: u64,
     pub margin: u64,
+    pub desired_leverage: u16,
 }
 
 impl Account {
     pub fn new(balance: u64) -> Self {
         Self {
             balance,
+            desired_leverage: LEVERAGE_PRECISION as u16,
             ..Self::default()
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn with_nonce(mut self, nonce: u64) -> Self {
         self.nonce = nonce;
         self
@@ -41,11 +46,15 @@ impl Account {
         self.size * SATOSHIS_PER_BITCOIN / self.entry_price
     }
 
+    fn divide_by_leverage(&self, n: u64) -> u64 {
+        n * PRICE_PRECISION * LEVERAGE_PRECISION / self.desired_leverage as u64 / PRICE_PRECISION
+    }
+
     pub fn create_order(&mut self, side: Direction, order: Order) -> Result<()> {
-        // TODO: divide added cost by desired leverage
+        let cost = self.divide_by_leverage(order.cost());
         match side {
-            Direction::Long => self.max_bid_margin += order.cost(),
-            Direction::Short => self.max_ask_margin += order.cost(),
+            Direction::Long => self.max_bid_margin += cost,
+            Direction::Short => self.max_ask_margin += cost,
         };
 
         let unlocked = self.update_locked_in_orders()?;
@@ -84,7 +93,7 @@ impl Account {
 
         // fund margin from `locked_in_orders`, or return locked funds to balance
         if is_own_order {
-            let cost = maker_order.cost();
+            let cost = self.divide_by_leverage(maker_order.cost());
             match maker_side {
                 Direction::Long => self.max_bid_margin -= cost,
                 Direction::Short => self.max_ask_margin -= cost,
@@ -106,7 +115,7 @@ impl Account {
         // move funds from balance to margin or vice versa. makers will already
         // have their margin funded from `locked_in_orders` in the section
         // above.
-        let new_margin = self.value();
+        let new_margin = self.divide_by_leverage(self.value());
         let margin_increasing = new_margin > self.margin;
         if margin_increasing {
             let margin_change = new_margin - self.margin;
