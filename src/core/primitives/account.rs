@@ -490,4 +490,40 @@ mod tests {
         account.add_pnl(prev_account, 500_00);
         assert_eq!(account.balance, 50_000_000);
     }
+
+    #[test]
+    fn add_to_position() {
+        let mut account = Account::new(0);
+        account.add_to_position(100, Direction::Long);
+        assert_eq!(account.size, 100);
+        assert_eq!(account.side, Direction::Long);
+
+        account.add_to_position(100, Direction::Long);
+        assert_eq!(account.size, 200);
+        assert_eq!(account.side, Direction::Long);
+
+        account.add_to_position(50, Direction::Short);
+        assert_eq!(account.size, 150);
+        assert_eq!(account.side, Direction::Long);
+
+        account.add_to_position(200, Direction::Short);
+        assert_eq!(account.size, 50);
+        assert_eq!(account.side, Direction::Short);
+    }
+
+    #[test]
+    fn leverage_division() {
+        let n: u64 = 1000;
+        let mut account = Account::new(1_000_000);
+        assert_eq!(account.divide_by_leverage(n), n);
+
+        account.desired_leverage = 2_00;
+        assert_eq!(account.divide_by_leverage(n), 500);
+
+        account.desired_leverage = 3_00;
+        assert_eq!(account.divide_by_leverage(n), 333);
+
+        account.desired_leverage = 100_00;
+        assert_eq!(account.divide_by_leverage(n), 10);
+    }
 }
