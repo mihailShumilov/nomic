@@ -468,7 +468,12 @@ mod tests {
                     size: 20,
                     height: 42,
                 }],
-                new_order: None,
+                new_order: Some(Order {
+                    price: 11,
+                    creator: [3; 33],
+                    height: 42,
+                    size: 5
+                }),
             }
         );
         let res = state.place_market_buy(5, &[3; 33]).unwrap();
