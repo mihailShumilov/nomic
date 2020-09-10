@@ -8,6 +8,7 @@ pub mod transaction;
 use crate::core::bitcoin::{bitcoin, Script};
 use orga::encoding::{self as ed, Decode, Encode};
 
+pub use account::LEVERAGE_PRECISION;
 pub type Address = [u8; 33];
 pub type Signature = [u8; 64];
 

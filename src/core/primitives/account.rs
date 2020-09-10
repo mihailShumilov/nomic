@@ -3,18 +3,19 @@ use crate::core::market::{Direction, Order};
 use crate::Result;
 use failure::bail;
 use orga::encoding::{self as ed, Decode, Encode};
-use std::cmp::max;
 
 const PRICE_PRECISION: u64 = 100_000_000;
-const LEVERAGE_PRECISION: u64 = 100;
 
-#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq, Copy)]
+pub const LEVERAGE_PRECISION: u16 = 100;
+pub const MAX_LEVERAGE: u16 = 100 * LEVERAGE_PRECISION;
+
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq, Copy)]
 pub struct Account {
     pub nonce: u64,
     pub balance: u64,
 
-    // Funds are moved from balance into locked_in_orders on order creation
-    pub locked_in_orders: u64,
+    // Funds are moved from balance into order_margin on order creation
+    pub order_margin: u64,
     pub max_bid_margin: u64,
     pub max_ask_margin: u64,
 
@@ -23,15 +24,31 @@ pub struct Account {
     pub side: Direction,
     // Price is cents/bitcoin
     pub entry_price: u64,
-    pub margin: u64,
+    pub position_margin: u64,
     pub desired_leverage: u16,
+}
+
+impl Default for Account {
+    fn default() -> Self {
+        Self {
+            nonce: 0,
+            balance: 0,
+            order_margin: 0,
+            max_bid_margin: 0,
+            max_ask_margin: 0,
+            size: 0,
+            side: Direction::default(),
+            entry_price: 0,
+            position_margin: 0,
+            desired_leverage: LEVERAGE_PRECISION,
+        }
+    }
 }
 
 impl Account {
     pub fn new(balance: u64) -> Self {
         Self {
             balance,
-            desired_leverage: LEVERAGE_PRECISION as u16,
             ..Self::default()
         }
     }
@@ -47,17 +64,18 @@ impl Account {
     }
 
     fn divide_by_leverage(&self, n: u64) -> u64 {
-        n * PRICE_PRECISION * LEVERAGE_PRECISION / self.desired_leverage as u64 / PRICE_PRECISION
+        n * PRICE_PRECISION * (LEVERAGE_PRECISION as u64)
+            / (self.desired_leverage as u64)
+            / PRICE_PRECISION
     }
 
     pub fn create_order(&mut self, side: Direction, order: Order) -> Result<()> {
-        let cost = self.divide_by_leverage(order.cost());
         match side {
-            Direction::Long => self.max_bid_margin += cost,
-            Direction::Short => self.max_ask_margin += cost,
+            Direction::Long => self.max_bid_margin += order.cost(),
+            Direction::Short => self.max_ask_margin += order.cost(),
         };
 
-        let unlocked = self.update_locked_in_orders()?;
+        let unlocked = self.update_order_margin()?;
         debug_assert_eq!(
             unlocked, 0,
             "Funds should not be unlocked when creating an order"
@@ -91,107 +109,78 @@ impl Account {
             },
         );
 
-        // fund margin from `locked_in_orders`, or return locked funds to balance
+        // fund margin from `order_margin`, or return locked funds to balance
         if is_own_order {
-            let cost = self.divide_by_leverage(maker_order.cost());
             match maker_side {
-                Direction::Long => self.max_bid_margin -= cost,
-                Direction::Short => self.max_ask_margin -= cost,
+                Direction::Long => self.max_bid_margin -= maker_order.cost(),
+                Direction::Short => self.max_ask_margin -= maker_order.cost(),
             }
 
-            let new_margin = self.value();
-            let margin_increasing = new_margin > self.margin;
+            let new_margin = self.divide_by_leverage(self.value());
+            let margin_increasing = new_margin > self.position_margin;
 
-            let unlocked = self.update_locked_in_orders()?;
+            let unlocked = self.update_order_margin()?;
             match margin_increasing {
-                true => self.margin += unlocked,
-                false => debug_assert_eq!(
-                    unlocked, 0,
-                    "Funds should not be unlocked when reducing margin"
-                ),
+                true => self.position_margin += unlocked,
+                false => self.balance += unlocked,
             }
         }
 
-        // move funds from balance to margin or vice versa. makers will already
-        // have their margin funded from `locked_in_orders` in the section
-        // above.
-        let new_margin = self.divide_by_leverage(self.value());
-        let margin_increasing = new_margin > self.margin;
-        if margin_increasing {
-            let margin_change = new_margin - self.margin;
-            if self.balance < margin_change {
-                bail!("Insufficient funds");
-            }
-            self.balance -= margin_change;
-            self.margin += margin_change;
-        } else {
-            let margin_change = self.margin - new_margin;
-            self.balance += margin_change;
-            self.margin -= margin_change;
-        }
+        self.balance += self.update_position_margin()?;
 
         self.add_pnl(prev_self, maker_order.price);
 
         Ok(())
     }
 
-    fn update_locked_in_orders(&mut self) -> Result<u64> {
-        let mut max_bid_margin = self.max_bid_margin;
-        let mut max_ask_margin = self.max_ask_margin;
+    fn update_order_margin(&mut self) -> Result<u64> {
+        let mut max_bid_margin = self.divide_by_leverage(self.max_bid_margin);
+        let mut max_ask_margin = self.divide_by_leverage(self.max_ask_margin);
         match self.side {
             Direction::Long => {
-                max_ask_margin = max_ask_margin.saturating_sub(self.margin);
+                max_ask_margin = max_ask_margin.saturating_sub(self.position_margin);
             }
             Direction::Short => {
-                max_bid_margin = max_bid_margin.saturating_sub(self.margin);
+                max_bid_margin = max_bid_margin.saturating_sub(self.position_margin);
             }
         };
 
-        let new_lio = max(max_bid_margin, max_ask_margin);
+        let new_om = max_bid_margin + max_ask_margin;
 
-        if new_lio > self.locked_in_orders {
-            // if new_lio increased, we're pulling money from our balance (and
+        if new_om > self.order_margin {
+            // if new_om increased, we're pulling money from our balance (and
             // erroring if there's not enough)
-            let to_lock = new_lio - self.locked_in_orders;
+            let to_lock = new_om - self.order_margin;
             if self.balance < to_lock {
                 bail!("Insufficient funds");
             }
             self.balance -= to_lock;
-            self.locked_in_orders += to_lock;
+            self.order_margin += to_lock;
             Ok(0)
         } else {
-            // if new_lio decreased, we're returning funds to somewhere else
-            let to_unlock = self.locked_in_orders - new_lio;
-            self.locked_in_orders -= to_unlock;
+            // if new_om decreased, we're returning funds to somewhere else
+            let to_unlock = self.order_margin - new_om;
+            self.order_margin -= to_unlock;
             Ok(to_unlock)
         }
+    }
 
-        // (price is 10 sats per cent)
-        // position: long 150 cents, margin = 1500 sats
-        // max_bid_margin, max_ask_margin = 0
-        // lio = 0
-
-        // action: open long order for 50 cents (margin 500 sats)
-        // max_bid_margin = 500
-        // lio = max(max_bid_margin - short ? margin : 0, max_ask_margin - long ? margin : 0) = 500
-        // balance -= 500
-        // action: open short order for 25 cents (margin 250 sats)
-        // max_bid_margin = 500
-        // max_ask_margin = 250
-        // lio = 500
-        // action: short order fills (25 cents)
-        // max_bid_margin = 500
-        // max_ask_margin = 0
-        // lio = max(500 - 0, 0 - 1500)
-
-        // alternately...
-        // action: open short order for 50 cents (margin 500 sats)
-        // max_ask_margin = 500
-        // lio = 0
-        // action: open long order for 25 cents (margin 250 sats)
-        // max_ask_margin = 500
-        // max_bid_margin = 250
-        // lio = 250
+    fn update_position_margin(&mut self) -> Result<u64> {
+        let new_margin = self.divide_by_leverage(self.value());
+        let margin_increasing = new_margin > self.position_margin;
+        if margin_increasing {
+            let margin_change = new_margin - self.position_margin;
+            if self.balance < margin_change {
+                bail!("Insufficient funds");
+            }
+            self.balance -= margin_change;
+            self.position_margin += margin_change;
+            Ok(0)
+        } else {
+            let margin_change = self.position_margin - new_margin;
+            self.position_margin -= margin_change;
+            Ok(margin_change)
+        }
     }
 
     fn add_to_position(&mut self, size: u64, side: Direction) {
@@ -240,6 +229,10 @@ impl Account {
             (false, false) => prev_self.size - self.size,
         };
 
+        if amount_reduced == 0 {
+            return;
+        }
+
         let amount_reduced_sats = amount_reduced * SATOSHIS_PER_BITCOIN;
 
         let (to_pay, to_receive, gained) = match prev_self.side {
@@ -263,6 +256,18 @@ impl Account {
             self.balance -= loss;
         }
     }
+
+    pub fn adjust_leverage(&mut self, leverage: u16) -> Result<()> {
+        debug_assert!(leverage >= LEVERAGE_PRECISION as u16);
+        debug_assert!(leverage <= MAX_LEVERAGE);
+
+        self.desired_leverage = leverage;
+
+        self.balance += self.update_position_margin()?;
+        self.balance += self.update_order_margin()?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -277,100 +282,70 @@ mod tests {
     }
 
     #[test]
-    fn locked_in_orders() {
+    fn create_then_fill_orders() {
+        fn order(price: u64, size: u64) -> Order {
+            Order {
+                creator: [2; 33],
+                height: 42,
+                price,
+                size,
+            }
+        }
+
         let mut account = Account::new(100_000_000);
-        assert_eq!(account.locked_in_orders, 0);
+        assert_eq!(account.order_margin, 0);
         assert_eq!(account.max_ask_margin, 0);
         assert_eq!(account.max_bid_margin, 0);
         assert_eq!(account.balance, 100_000_000);
-        assert_eq!(account.margin, 0);
+        assert_eq!(account.position_margin, 0);
 
         account
-            .create_order(
-                Direction::Long,
-                Order {
-                    creator: [2; 33],
-                    height: 42,
-                    price: 100,
-                    size: 1,
-                },
-            )
+            .create_order(Direction::Long, order(100, 1))
             .unwrap();
-        assert_eq!(account.locked_in_orders, 1_000_000);
+        assert_eq!(account.order_margin, 1_000_000);
         assert_eq!(account.max_ask_margin, 0);
         assert_eq!(account.max_bid_margin, 1_000_000);
         assert_eq!(account.balance, 99_000_000);
-        assert_eq!(account.margin, 0);
+        assert_eq!(account.position_margin, 0);
 
         account
-            .create_order(
-                Direction::Short,
-                Order {
-                    creator: [2; 33],
-                    height: 42,
-                    price: 200,
-                    size: 1,
-                },
-            )
+            .create_order(Direction::Short, order(200, 1))
             .unwrap();
-        assert_eq!(account.locked_in_orders, 1_000_000);
+        assert_eq!(account.order_margin, 1_500_000);
         assert_eq!(account.max_ask_margin, 500_000);
-        assert_eq!(account.max_bid_margin, 1_000_000);
-        assert_eq!(account.balance, 99_000_000);
-        assert_eq!(account.margin, 0);
-
-        account
-            .create_order(
-                Direction::Long,
-                Order {
-                    creator: [2; 33],
-                    height: 42,
-                    price: 100,
-                    size: 1,
-                },
-            )
-            .unwrap();
-        assert_eq!(account.locked_in_orders, 2_000_000);
-        assert_eq!(account.max_ask_margin, 500_000);
-        assert_eq!(account.max_bid_margin, 2_000_000);
-        assert_eq!(account.balance, 98_000_000);
-        assert_eq!(account.margin, 0);
-
-        account
-            .fill_order(
-                Direction::Long,
-                Order {
-                    creator: [2; 33],
-                    height: 42,
-                    price: 100,
-                    size: 1,
-                },
-                true,
-            )
-            .unwrap();
-        assert_eq!(account.locked_in_orders, 1_000_000);
-        assert_eq!(account.max_ask_margin, 500_000);
-        assert_eq!(account.max_bid_margin, 1_000_000);
-        assert_eq!(account.balance, 98_000_000);
-        assert_eq!(account.margin, 1_000_000);
-
-        account
-            .fill_order(
-                Direction::Short,
-                Order {
-                    creator: [2; 33],
-                    height: 42,
-                    price: 200,
-                    size: 1,
-                },
-                true,
-            )
-            .unwrap();
-        assert_eq!(account.locked_in_orders, 1_000_000);
-        assert_eq!(account.max_ask_margin, 0);
         assert_eq!(account.max_bid_margin, 1_000_000);
         assert_eq!(account.balance, 98_500_000);
-        assert_eq!(account.margin, 500_000);
+        assert_eq!(account.position_margin, 0);
+
+        account
+            .create_order(Direction::Long, order(100, 1))
+            .unwrap();
+        assert_eq!(account.order_margin, 2_500_000);
+        assert_eq!(account.max_ask_margin, 500_000);
+        assert_eq!(account.max_bid_margin, 2_000_000);
+        assert_eq!(account.balance, 97_500_000);
+        assert_eq!(account.position_margin, 0);
+
+        account
+            .fill_order(Direction::Long, order(100, 1), true)
+            .unwrap();
+        assert_eq!(account.order_margin, 1_500_000);
+        assert_eq!(account.max_ask_margin, 500_000);
+        assert_eq!(account.max_bid_margin, 1_000_000);
+        assert_eq!(account.balance, 97_500_000);
+        assert_eq!(account.position_margin, 1_000_000);
+        assert_eq!(account.entry_price, 100);
+
+        account
+            .fill_order(Direction::Short, order(200, 1), true)
+            .unwrap();
+        assert_eq!(account.order_margin, 1_000_000);
+        assert_eq!(account.max_ask_margin, 0);
+        assert_eq!(account.max_bid_margin, 1_000_000);
+        assert_eq!(account.size, 0);
+        assert_eq!(account.balance, 99_500_000);
+        assert_eq!(account.position_margin, 0);
+        assert_eq!(account.entry_price, 100);
     }
 
     #[test]
