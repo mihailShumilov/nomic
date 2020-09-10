@@ -2,7 +2,10 @@ use super::super::accounts::State as AccountState;
 use super::super::SECP;
 use super::State as MarketState;
 use crate::core::market::Direction;
-use crate::core::primitives::{transaction::PlaceOrderTransaction, Account, Address};
+use crate::core::primitives::{
+    transaction::{PlaceOrderTransaction, UpdateLeverageTransaction},
+    Account, Address,
+};
 use crate::Result;
 use failure::bail;
 use orga::{
@@ -72,6 +75,40 @@ pub fn place_order_tx<S: Store + Iter>(
     Ok(())
 }
 
+pub fn update_leverage_tx<S: Store + Iter>(
+    market: &mut MarketState<S>,
+    accounts: &mut AccountState<S>,
+    height: u64,
+    tx: UpdateLeverageTransaction,
+) -> Result<()> {
+    if tx.fee_amount < 1000 {
+        bail!("Transaction fee is too small");
+    }
+    // TODO: Update this when tx encoding uses Ed instead of Serde
+    if tx.creator.len() != 33 {
+        bail!("Invalid creator address");
+    }
+    let creator = unsafe_slice_to_address(&tx.creator[..]);
+    if !tx.verify_signature(&SECP)? {
+        bail!("Invalid signature");
+    }
+    if tx.leverage_preference < crate::core::primitives::LEVERAGE_PRECISION {
+        bail!("Leverage preference is too small");
+    }
+    let maybe_creator_account = accounts.get(creator)?;
+    let mut creator_account = match maybe_creator_account {
+        Some(creator_account) => creator_account,
+        None => bail!("Account does not exist"),
+    };
+    if tx.nonce != creator_account.nonce {
+        bail!("Invalid account nonce");
+    }
+
+    // creator_account.adjust_leverage(tx.leverage_preference)?;
+
+    Ok(())
+}
+
 fn unsafe_slice_to_address(slice: &[u8]) -> Address {
     let mut buf: Address = [0; 33];
     buf.copy_from_slice(slice);
@@ -90,7 +127,7 @@ mod tests {
             signature: vec![],
             nonce: 0,
             fee_amount: 1000,
-            price: Some(10000),
+            price: Some(100),
             side: Direction::Long,
             size: 100,
         };
@@ -98,7 +135,7 @@ mod tests {
         let mut account_state: AccountState<_> = MapStore::new().wrap().unwrap();
         let mut market_state: MarketState<_> = MapStore::new().wrap().unwrap();
         account_state
-            .insert(pubkey.serialize(), Account::new(100000))
+            .insert(pubkey.serialize(), Account::new(100_000_000))
             .unwrap();
         place_order_tx(&mut market_state, &mut account_state, 42, tx).unwrap();
 
