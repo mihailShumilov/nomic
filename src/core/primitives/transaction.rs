@@ -149,7 +149,7 @@ impl Sighash for WithdrawalTransaction {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PlaceOrderTransaction {
     pub signature: Vec<u8>,
-    pub fee_amount: u64, 
+    pub fee_amount: u64,
     pub nonce: u64,
     // TODO: Is there a good reason we're using a vec here instead of our crate's Address type?
     pub creator: Vec<u8>,
@@ -161,13 +161,29 @@ pub struct PlaceOrderTransaction {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UpdateOrderTransaction {
     pub signature: Vec<u8>,
-    pub fee_amount: u64, 
+    pub fee_amount: u64,
     pub nonce: u64,
     pub size: u64,
     // These fields needed to construct order's index:
     pub creator: Vec<u8>,
     pub height: u64,
     pub price: u64,
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UpdateLeverageTransaction {
+    pub signature: Vec<u8>,
+    pub fee_amount: u64,
+    pub nonce: u64,
+    pub creator: Vec<u8>,
+    pub leverage_preference: u16,
+}
+
+impl Sighash for UpdateLeverageTransaction {
+    fn sighash_input(&self) -> Result<Vec<u8>> {
+        let mut sighash_tx = self.clone();
+        sighash_tx.signature = vec![];
+        Ok(bincode::serialize(&sighash_tx)?)
+    }
 }
 
 impl Sighash for PlaceOrderTransaction {
@@ -188,13 +204,34 @@ impl Sighash for UpdateOrderTransaction {
 
 impl PlaceOrderTransaction {
     pub fn verify_signature(&self, secp: &Secp256k1<VerifyOnly>) -> Result<bool> {
-        verify_signature(secp, self.signature.as_slice(), self.creator.as_slice(), self)
+        verify_signature(
+            secp,
+            self.signature.as_slice(),
+            self.creator.as_slice(),
+            self,
+        )
     }
 }
 
 impl UpdateOrderTransaction {
     pub fn verify_signature(&self, secp: &Secp256k1<VerifyOnly>) -> Result<bool> {
-        verify_signature(secp, self.signature.as_slice(), self.creator.as_slice(), self)
+        verify_signature(
+            secp,
+            self.signature.as_slice(),
+            self.creator.as_slice(),
+            self,
+        )
+    }
+}
+
+impl UpdateLeverageTransaction {
+    pub fn verify_signature(&self, secp: &Secp256k1<VerifyOnly>) -> Result<bool> {
+        verify_signature(
+            secp,
+            self.signature.as_slice(),
+            self.creator.as_slice(),
+            self,
+        )
     }
 }
 
