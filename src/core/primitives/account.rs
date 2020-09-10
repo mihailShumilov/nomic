@@ -195,7 +195,17 @@ impl Account {
     }
 
     fn add_to_position(&mut self, size: u64, side: Direction) {
-        unimplemented!()
+        if side == self.side {
+            // increase position
+            self.size += size;
+        } else if size > self.size {
+            // reverse position
+            self.size = size - self.size;
+            self.side = side;
+        } else {
+            // reduce position without reversing
+            self.size -= size;
+        }
     }
 
     fn update_entry_price(&mut self, order: Order, position_increasing: bool) {
