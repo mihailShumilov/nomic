@@ -346,6 +346,47 @@ mod tests {
         assert_eq!(account.balance, 99_500_000);
         assert_eq!(account.position_margin, 0);
         assert_eq!(account.entry_price, 100);
+
+        account
+            .adjust_leverage(account.desired_leverage * 2)
+            .unwrap();
+        assert_eq!(account.order_margin, 500_000);
+        assert_eq!(account.max_ask_margin, 0);
+        assert_eq!(account.max_bid_margin, 1_000_000);
+        assert_eq!(account.size, 0);
+        assert_eq!(account.balance, 100_000_000);
+        assert_eq!(account.position_margin, 0);
+        assert_eq!(account.entry_price, 100);
+
+        account
+            .fill_order(Direction::Long, order(100, 1), true)
+            .unwrap();
+        assert_eq!(account.order_margin, 0);
+        assert_eq!(account.max_ask_margin, 0);
+        assert_eq!(account.max_bid_margin, 0);
+        assert_eq!(account.balance, 100_000_000);
+        assert_eq!(account.position_margin, 500_000);
+        assert_eq!(account.entry_price, 100);
+
+        account
+            .adjust_leverage(account.desired_leverage * 2)
+            .unwrap();
+        assert_eq!(account.order_margin, 0);
+        assert_eq!(account.max_ask_margin, 0);
+        assert_eq!(account.max_bid_margin, 0);
+        assert_eq!(account.balance, 100_250_000);
+        assert_eq!(account.position_margin, 250_000);
+        assert_eq!(account.entry_price, 100);
+
+        account
+            .fill_order(Direction::Long, order(200, 1), false)
+            .unwrap();
+        assert_eq!(account.order_margin, 0);
+        assert_eq!(account.max_ask_margin, 0);
+        assert_eq!(account.max_bid_margin, 0);
+        assert_eq!(account.balance, 101_000_000);
+        assert_eq!(account.position_margin, 0);
+        assert_eq!(account.entry_price, 100);
     }
 
     #[test]
