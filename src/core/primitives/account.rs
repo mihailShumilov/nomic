@@ -310,6 +310,15 @@ mod tests {
     use super::*;
     use crate::core::market::{Direction, Order};
 
+    fn order(price: u64, size: u64) -> Order {
+        Order {
+            creator: [2; 33],
+            height: 42,
+            price,
+            size,
+        }
+    }
+
     #[test]
     fn new_account() {
         let account = Account::new(1234);
@@ -318,15 +327,6 @@ mod tests {
 
     #[test]
     fn create_then_fill_orders() {
-        fn order(price: u64, size: u64) -> Order {
-            Order {
-                creator: [2; 33],
-                height: 42,
-                price,
-                size,
-            }
-        }
-
         let mut account = Account::new(100_000_000);
         assert_eq!(account.order_margin, 0);
         assert_eq!(account.max_ask_margin, 0);
@@ -444,54 +444,22 @@ mod tests {
         assert_eq!(account.entry_price, 0);
 
         // Increase position from 0
-        account.update_entry_price(
-            Order {
-                creator: [2; 33],
-                height: 42,
-                size: 100,
-                price: 1000,
-            },
-            true,
-        );
+        account.update_entry_price(order(100, 1000), true);
         account.size = 100;
         assert_eq!(account.entry_price, 1000);
 
         // Increase position further
-        account.update_entry_price(
-            Order {
-                creator: [2; 33],
-                height: 42,
-                size: 100,
-                price: 2000,
-            },
-            true,
-        );
+        account.update_entry_price(order(100, 2000), true);
         account.size = 200;
         assert_eq!(account.entry_price, 1500);
 
         // Decrease position, same side
-        account.update_entry_price(
-            Order {
-                creator: [2; 33],
-                height: 42,
-                size: 100,
-                price: 500,
-            },
-            false,
-        );
+        account.update_entry_price(order(100, 500), false);
         account.size = 100;
         assert_eq!(account.entry_price, 1500);
 
         // Reverse
-        account.update_entry_price(
-            Order {
-                creator: [2; 33],
-                height: 42,
-                size: 400,
-                price: 3000,
-            },
-            false,
-        );
+        account.update_entry_price(order(400, 3000), false);
         account.size = 300;
         assert_eq!(account.entry_price, 3000);
     }
