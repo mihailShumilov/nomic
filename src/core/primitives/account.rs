@@ -559,4 +559,18 @@ mod tests {
         account.desired_leverage = 100_00;
         assert_eq!(account.divide_by_leverage(n), 10);
     }
+
+    #[test]
+    fn bankruptcy_price_calculation() {
+        let mut account = Account::new(0);
+        account.size = 2000_00;
+        // account.position_margin = 2_000_000;
+        account.position_margin = 20_000_000;
+        account.side = Direction::Long;
+        account.entry_price = 10000_00;
+        assert_eq!(account.bankruptcy_price(), 9090_90);
+
+        account.side = Direction::Short;
+        assert_eq!(account.bankruptcy_price(), 11111_11);
+    }
 }
