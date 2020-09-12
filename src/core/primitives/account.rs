@@ -272,6 +272,37 @@ impl Account {
 
         Ok(())
     }
+
+    pub fn bankruptcy_price(&self) -> u64 {
+        // short bankruptcyPrice = -((entryPrice * size) / (entryPrice * margin - size))
+        // long bankruptcyPrice = (entryPrice * size) / (entryPrice * margin + size)
+        let entry_price = self.entry_price as i128;
+        let size = self.size as i128;
+        let side = self.side;
+        let position_margin = self.position_margin as i128;
+        fn div<A, B>(a: A, b: B) -> i128
+        where
+            A: Into<i128>,
+            B: Into<i128>,
+        {
+            const PRECISION: i128 = 100_000_000;
+            a.into() * PRECISION / b.into() / PRECISION
+        }
+
+        match side {
+            Direction::Long => div(
+                entry_price * size,
+                div(entry_price * position_margin, SATOSHIS_PER_BITCOIN) + size,
+            ) as u64,
+
+            Direction::Short => {
+                -(div(
+                    entry_price * size,
+                    div(entry_price * position_margin, SATOSHIS_PER_BITCOIN) - size,
+                )) as u64
+            }
+        }
+    }
 }
 
 #[cfg(test)]
