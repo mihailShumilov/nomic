@@ -425,6 +425,20 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "Insufficient funds")]
+    fn insufficient_margin() {
+        let mut account = Account::new(100_000_000);
+        account.adjust_leverage(4 * LEVERAGE_PRECISION).unwrap();
+        account
+            .fill_order(Direction::Short, order(100, 200), false)
+            .unwrap();
+        assert_eq!(account.balance, 50_000_000);
+        assert_eq!(account.position_margin, 50_000_000);
+        assert_eq!(account.size, 200);
+        account.adjust_leverage(LEVERAGE_PRECISION).unwrap();
+    }
+
+    #[test]
     fn update_entry_price() {
         let mut account = Account::new(100_000_000);
         assert_eq!(account.entry_price, 0);
