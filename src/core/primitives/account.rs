@@ -60,7 +60,11 @@ impl Account {
     }
 
     pub fn value(&self) -> u64 {
-        self.size * SATOSHIS_PER_BITCOIN / self.entry_price
+        if self.size == 0 {
+            0
+        } else {
+            self.size * SATOSHIS_PER_BITCOIN / self.entry_price
+        }
     }
 
     fn divide_by_leverage(&self, n: u64) -> u64 {
