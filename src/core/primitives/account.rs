@@ -296,10 +296,12 @@ impl Account {
             ) as u64,
 
             Direction::Short => {
-                -(div(
-                    entry_price * size,
-                    div(entry_price * position_margin, SATOSHIS_PER_BITCOIN) - size,
-                )) as u64
+                let divisor = -(div(entry_price * position_margin, SATOSHIS_PER_BITCOIN) - size);
+                if divisor == 0 {
+                    u64::MAX
+                } else {
+                    div(entry_price * size, divisor) as u64
+                }
             }
         }
     }
@@ -564,13 +566,18 @@ mod tests {
     fn bankruptcy_price_calculation() {
         let mut account = Account::new(0);
         account.size = 2000_00;
-        // account.position_margin = 2_000_000;
-        account.position_margin = 20_000_000;
+        account.position_margin = 2_000_000;
         account.side = Direction::Long;
         account.entry_price = 10000_00;
         assert_eq!(account.bankruptcy_price(), 9090_90);
 
         account.side = Direction::Short;
         assert_eq!(account.bankruptcy_price(), 11111_11);
+
+        account.position_margin = 20_000_000;
+        assert_eq!(account.bankruptcy_price(), u64::MAX);
+
+        account.side = Direction::Long;
+        assert_eq!(account.bankruptcy_price(), 5000_00);
     }
 }
