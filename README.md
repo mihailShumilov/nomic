@@ -2,7 +2,8 @@
 <img src="./logo.png" width="60%">
 </h1>
 
-[![Rust](https://github.com/nomic-io/nomic/workflows/Rust/badge.svg)](https://github.com/nomic-io/nomic/actions?query=workflow%3ARust)
+![CI](https://github.com/nomic-io/nomic/actions/workflows/ci.yml/badge.svg)
+[![codecov](https://codecov.io/gh/nomic-io/nomic/branch/develop/graph/badge.svg?token=LLGS76CDIF)](https://codecov.io/gh/nomic-io/nomic)
 [![Telegram](https://img.shields.io/static/v1?label=chat&message=Telegram&color=blue&logo=telegram)](https://t.me/nomicbtc)
 
 Rust implementation of the [Nomic Bitcoin sidechain](https://github.com/nomic-io/bitcoin-peg).
