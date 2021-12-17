@@ -96,6 +96,15 @@ impl WrappedHeader {
 
 pub struct HeaderList(Vec<WrappedHeader>);
 
+impl IntoIterator for HeaderList {
+    type Item = WrappedHeader;
+    type IntoIter = ::std::vec::IntoIter<WrappedHeader>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 impl From<Vec<WrappedHeader>> for HeaderList {
     fn from(headers: Vec<WrappedHeader>) -> Self {
         HeaderList(headers)
