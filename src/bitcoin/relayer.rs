@@ -3,61 +3,68 @@ use crate::bitcoin::header_queue::{HeaderList, HeaderQueue, WrappedHeader};
 use crate::error::Result;
 use bitcoincore_rpc::{Client as BtcClient, RpcApi};
 use orga::prelude::*;
-use orga::Result as OrgaResult;
 
 const SEEK_BATCH_SIZE: u32 = 10;
 
 type AppClient = TendermintClient<crate::app::App>;
 
-pub struct Relayer {
+pub trait PegClient {
+    fn height(&self) -> Result<u32>;
+    fn trusted_height(&self) -> Result<u32>;
+    fn add(&mut self, header: HeaderList) -> Result<()>;
+}
+
+// impl PegClient for AppClient {
+//      fn height(&self) -> OrgaResult<u32> {
+//         self.app_client
+//             .query(
+//                 AppQuery::FieldBtcHeaders(HeaderQueueQuery::MethodHeight(vec![])),
+//                 |state| Ok(state.btc_headers.height().unwrap()),
+//             )
+//
+//     }
+
+//      fn trusted_height(&self) -> OrgaResult<u32> {
+//         self.app_client
+//             .query(
+//                 AppQuery::FieldBtcHeaders(HeaderQueueQuery::MethodTrustedHeight(vec![])),
+//                 |state| Ok(state.btc_headers.trusted_height()),
+//             )
+//
+//     }
+
+//      fn add(&mut self, headers: HeaderList) -> OrgaResult<()> {
+//         self.app_client.btc_headers.add(headers)
+//     }
+// }
+
+pub struct Relayer<P: PegClient> {
     btc_client: BtcClient,
-    app_client: AppClient,
+    peg_client: P,
 }
 
 type AppQuery = <InnerApp as Query>::Query;
 type HeaderQueueQuery = <HeaderQueue as Query>::Query;
 
-impl Relayer {
-    pub fn new(btc_client: BtcClient, app_client: AppClient) -> Self {
+impl<P: PegClient> Relayer<P> {
+    pub fn new(btc_client: BtcClient, peg_client: P) -> Self {
         Relayer {
             btc_client,
-            app_client,
+            peg_client,
         }
     }
 
-    async fn app_height(&self) -> OrgaResult<u32> {
-        self.app_client
-            .query(
-                AppQuery::FieldBtcHeaders(HeaderQueueQuery::MethodHeight(vec![])),
-                |state| Ok(state.btc_headers.height().unwrap()),
-            )
-            .await
+    pub fn start(&mut self) -> Result<!> {
+        self.wait_for_trusted_header()?;
+        self.header_listen()
     }
 
-    async fn app_trusted_height(&self) -> OrgaResult<u32> {
-        self.app_client
-            .query(
-                AppQuery::FieldBtcHeaders(HeaderQueueQuery::MethodTrustedHeight(vec![])),
-                |state| Ok(state.btc_headers.trusted_height()),
-            )
-            .await
-    }
-
-    async fn app_add(&mut self, headers: HeaderList) -> OrgaResult<()> {
-        self.app_client.btc_headers.add(headers).await
-    }
-
-    pub async fn start(&mut self) -> Result<!> {
-        self.wait_for_trusted_header().await?;
-        self.listen().await
-    }
-
-    async fn wait_for_trusted_header(&self) -> Result<()> {
+    fn wait_for_trusted_header(&self) -> Result<()> {
         loop {
             let tip_hash = self.btc_client.get_best_block_hash()?;
             let tip_height = self.btc_client.get_block_header_info(&tip_hash)?.height;
             println!("wait_for_trusted_header: btc={}", tip_height);
-            if (tip_height as u32) < self.app_trusted_height().await? {
+            if (tip_height as u32) < self.peg_client.trusted_height()? {
                 std::thread::sleep(std::time::Duration::from_secs(1));
             } else {
                 break;
@@ -67,17 +74,17 @@ impl Relayer {
         Ok(())
     }
 
-    async fn listen(&mut self) -> Result<!> {
+    fn header_listen(&mut self) -> Result<!> {
         loop {
             let tip_hash = self.btc_client.get_best_block_hash()?;
             let tip_height = self.btc_client.get_block_header_info(&tip_hash)?.height;
             println!(
                 "relayer listen: btc={}, app={}",
                 tip_height,
-                self.app_height().await?
+                self.peg_client.height()?
             );
-            if tip_height as u32 > self.app_height().await? {
-                self.seek_to_tip().await?;
+            if tip_height as u32 > self.peg_client.height()? {
+                self.seek_to_tip()?;
             } else {
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
@@ -85,12 +92,12 @@ impl Relayer {
     }
 
     #[cfg(test)]
-    pub async fn bounded_listen(&mut self, num_blocks: u32) -> Result<()> {
+    pub fn bounded_header_listen(&mut self, num_blocks: u32) -> Result<()> {
         for _ in 0..num_blocks {
             let tip_hash = self.btc_client.get_best_block_hash()?;
             let tip_height = self.btc_client.get_block_header_info(&tip_hash)?.height;
-            if tip_height as u32 > self.app_height().await? {
-                self.seek_to_tip().await?;
+            if tip_height as u32 > self.peg_client.height()? {
+                self.seek_to_tip()?;
             } else {
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
@@ -99,24 +106,24 @@ impl Relayer {
         Ok(())
     }
 
-    async fn seek_to_tip(&mut self) -> Result<()> {
+    fn seek_to_tip(&mut self) -> Result<()> {
         let tip_height = self.get_rpc_height()?;
-        let mut app_height = self.app_height().await?;
+        let mut app_height = self.peg_client.height()?;
         while app_height < tip_height {
             println!("seek_to_tip: btc={}, app={}", tip_height, app_height);
-            let headers = self.get_header_batch(SEEK_BATCH_SIZE).await?;
-            self.app_add(headers.into()).await?;
-            app_height = self.app_height().await?;
+            let headers = self.get_header_batch(SEEK_BATCH_SIZE)?;
+            self.peg_client.add(headers.into())?;
+            app_height = self.peg_client.height()?;
         }
         Ok(())
     }
 
-    async fn get_header_batch(&self, batch_size: u32) -> Result<Vec<WrappedHeader>> {
+    fn get_header_batch(&self, batch_size: u32) -> Result<Vec<WrappedHeader>> {
         let mut headers = Vec::with_capacity(batch_size as usize);
         for i in 1..=batch_size {
             let hash = match self
                 .btc_client
-                .get_block_hash((self.app_height().await? + i) as u64)
+                .get_block_hash((self.peg_client.height()? + i) as u64)
             {
                 Ok(hash) => hash,
                 Err(_) => break,
@@ -139,7 +146,6 @@ impl Relayer {
     }
 }
 
-#[cfg(todo)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,6 +155,21 @@ mod tests {
     use bitcoind::BitcoinD;
     use orga::encoding::Encode;
     use orga::store::{MapStore, Shared, Store};
+    use std::sync::{Arc, Mutex};
+
+    impl PegClient for Arc<Mutex<HeaderQueue>> {
+        fn height(&self) -> Result<u32> {
+            self.lock().unwrap().height()
+        }
+
+        fn trusted_height(&self) -> Result<u32> {
+            Ok(self.lock().unwrap().trusted_height())
+        }
+
+        fn add(&mut self, headers: HeaderList) -> Result<()> {
+            self.lock().unwrap().add_into_iter(headers)
+        }
+    }
 
     #[test]
     fn relayer_seek() {
@@ -172,12 +193,14 @@ mod tests {
 
         bitcoind.client.generate_to_address(100, &address).unwrap();
 
-        let store = Store::new(Shared::new(MapStore::new()));
+        let store = Store::new(Shared::new(MapStore::new()).into());
 
-        let mut header_queue = HeaderQueue::with_conf(store, Default::default(), config).unwrap();
-        let relayer = Relayer::new(rpc_client);
-        relayer.seek_to_tip(&mut header_queue).unwrap();
-        let height = header_queue.height().unwrap();
+        let header_queue = HeaderQueue::with_conf(store, Default::default(), config).unwrap();
+
+        let arc_mut = Arc::new(Mutex::new(header_queue));
+        let mut relayer = Relayer::new(rpc_client, arc_mut.clone());
+        relayer.seek_to_tip().unwrap();
+        let height = arc_mut.lock().unwrap().height().unwrap();
 
         assert_eq!(height, 130);
     }
@@ -207,12 +230,13 @@ mod tests {
             .generate_to_address(42 as u64, &address)
             .unwrap();
 
-        let store = Store::new(Shared::new(MapStore::new()));
+        let store = Store::new(Shared::new(MapStore::new()).into());
 
-        let mut header_queue = HeaderQueue::with_conf(store, Default::default(), config).unwrap();
-        let relayer = Relayer::new(rpc_client);
-        relayer.seek_to_tip(&mut header_queue).unwrap();
-        let height = header_queue.height().unwrap();
+        let header_queue = HeaderQueue::with_conf(store, Default::default(), config).unwrap();
+        let arc_mut = Arc::new(Mutex::new(header_queue));
+        let mut relayer = Relayer::new(rpc_client, arc_mut.clone());
+        relayer.seek_to_tip().unwrap();
+        let height = arc_mut.lock().unwrap().height().unwrap();
 
         assert_eq!(height, 72);
     }
