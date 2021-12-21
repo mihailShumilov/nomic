@@ -1,10 +1,22 @@
 use crate::app::InnerApp;
 use crate::bitcoin::header_queue::{HeaderList, HeaderQueue, WrappedHeader};
-use crate::error::Result;
+use crate::error::{Error, Result};
+use bitcoin::util::merkleblock::{MerkleBlock, PartialMerkleTree};
+use bitcoin::{Script, Transaction};
+use bitcoincore_rpc::bitcoincore_rpc_json::ScanTxOutRequest;
 use bitcoincore_rpc::{Client as BtcClient, RpcApi};
+use orga::coins::Address;
 use orga::prelude::*;
+use std::collections::HashMap;
 
 const SEEK_BATCH_SIZE: u32 = 10;
+
+pub struct DepositTxn {
+    block_height: u32,
+    transaction: Transaction,
+    proof: PartialMerkleTree,
+    payable_addr: Address,
+}
 
 type AppClient = TendermintClient<crate::app::App>;
 
@@ -41,6 +53,7 @@ pub trait PegClient {
 pub struct Relayer<P: PegClient> {
     btc_client: BtcClient,
     peg_client: P,
+    listen_map: HashMap<Script, Address>,
 }
 
 type AppQuery = <InnerApp as Query>::Query;
@@ -51,6 +64,7 @@ impl<P: PegClient> Relayer<P> {
         Relayer {
             btc_client,
             peg_client,
+            listen_map: HashMap::new(),
         }
     }
 
@@ -145,6 +159,42 @@ impl<P: PegClient> Relayer<P> {
         } else {
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
+        Ok(())
+    }
+
+    fn step_transaction(&mut self, descriptors: &[String]) -> Result<()> {
+        let descriptors: Vec<_> = descriptors
+            .iter()
+            .map(|desc| ScanTxOutRequest::Single(desc.to_owned()))
+            .collect();
+        let tx_outset = self.btc_client.scan_tx_out_set_blocking(&descriptors)?;
+
+        for tx in tx_outset.unspents.iter() {
+            if !tx.script_pub_key.is_v0_p2wsh() {
+                continue;
+            }
+
+            let block_hash = self.btc_client.get_block_hash(tx.height as u64)?;
+            let block = self.btc_client.get_block(&block_hash)?;
+            let block_proof = MerkleBlock::from_block_with_predicate(&block, |x| x == &tx.txid).txn;
+
+            let payable_addr = match self.listen_map.get(&tx.script_pub_key) {
+                Some(pk) => pk,
+                None => continue,
+            };
+
+            let transaction = self.btc_client.get_transaction(&tx.txid)?;
+
+            let deposit = DepositTxn {
+                block_height: tx.height as u32,
+                transaction,
+                proof: block_proof,
+                payable_addr,
+            };
+
+            //some kind of call that sends this to the chain to be verified
+        }
+
         Ok(())
     }
 }
