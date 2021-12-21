@@ -54,9 +54,28 @@ impl<P: PegClient> Relayer<P> {
         }
     }
 
+    fn listen(&mut self, func: &dyn Fn(&mut Self) -> Result<()>) -> Result<!> {
+        loop {
+            func(self)?;
+        }
+    }
+
+    #[cfg(test)]
+    fn bounded_listen(
+        &mut self,
+        func: &mut dyn FnMut(&mut Self) -> Result<()>,
+        num_blocks: u32,
+    ) -> Result<()> {
+        for _ in 0..num_blocks {
+            func(self)?;
+        }
+
+        Ok(())
+    }
+
     pub fn start(&mut self) -> Result<!> {
         self.wait_for_trusted_header()?;
-        self.header_listen()
+        self.listen(&Relayer::step_header)
     }
 
     fn wait_for_trusted_header(&self) -> Result<()> {
@@ -68,38 +87,6 @@ impl<P: PegClient> Relayer<P> {
                 std::thread::sleep(std::time::Duration::from_secs(1));
             } else {
                 break;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn header_listen(&mut self) -> Result<!> {
-        loop {
-            let tip_hash = self.btc_client.get_best_block_hash()?;
-            let tip_height = self.btc_client.get_block_header_info(&tip_hash)?.height;
-            println!(
-                "relayer listen: btc={}, app={}",
-                tip_height,
-                self.peg_client.height()?
-            );
-            if tip_height as u32 > self.peg_client.height()? {
-                self.seek_to_tip()?;
-            } else {
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            }
-        }
-    }
-
-    #[cfg(test)]
-    pub fn bounded_header_listen(&mut self, num_blocks: u32) -> Result<()> {
-        for _ in 0..num_blocks {
-            let tip_hash = self.btc_client.get_best_block_hash()?;
-            let tip_height = self.btc_client.get_block_header_info(&tip_hash)?.height;
-            if tip_height as u32 > self.peg_client.height()? {
-                self.seek_to_tip()?;
-            } else {
-                std::thread::sleep(std::time::Duration::from_secs(1));
             }
         }
 
