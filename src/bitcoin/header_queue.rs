@@ -12,6 +12,7 @@ use orga::state::State;
 use orga::store::Store;
 use orga::Error as OrgaError;
 use orga::Result as OrgaResult;
+use std::ops::{Deref, DerefMut};
 
 const MAX_LENGTH: u64 = 4032;
 const MAX_TIME_INCREASE: u32 = 2 * 60 * 60;
@@ -33,6 +34,20 @@ pub struct WrappedHeader {
     header: Adapter<BlockHeader>,
 }
 
+impl Deref for WrappedHeader {
+    type Target = BlockHeader;
+
+    fn deref(&self) -> &Self::Target {
+        &self.header
+    }
+}
+
+impl DerefMut for WrappedHeader {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.header
+    }
+}
+
 impl WrappedHeader {
     pub fn new(header: Adapter<BlockHeader>, height: u32) -> Self {
         WrappedHeader { height, header }
@@ -43,34 +58,6 @@ impl WrappedHeader {
             height,
             header: Adapter::new(*header),
         }
-    }
-
-    pub fn time(&self) -> u32 {
-        self.header.time
-    }
-
-    pub fn target(&self) -> Uint256 {
-        self.header.target()
-    }
-
-    pub fn block_hash(&self) -> BlockHash {
-        self.header.block_hash()
-    }
-
-    pub fn prev_blockhash(&self) -> BlockHash {
-        self.header.prev_blockhash
-    }
-
-    pub fn work(&self) -> Uint256 {
-        self.header.work()
-    }
-
-    pub fn height(&self) -> u32 {
-        self.height
-    }
-
-    pub fn bits(&self) -> u32 {
-        self.header.bits
     }
 
     pub fn u256_from_compact(compact: u32) -> Uint256 {
@@ -87,10 +74,6 @@ impl WrappedHeader {
         buffer[32 - bytes.len()..].copy_from_slice(&bytes);
 
         Uint256::from_be_bytes(buffer)
-    }
-
-    fn validate_pow(&self, required_target: &Uint256) -> Result<BlockHash> {
-        Ok(self.header.validate_pow(required_target)?)
     }
 }
 
@@ -162,28 +145,26 @@ impl Query for WorkHeader {
     }
 }
 
+impl Deref for WorkHeader {
+    type Target = WrappedHeader;
+
+    fn deref(&self) -> &Self::Target {
+        &self.header
+    }
+}
+
+impl DerefMut for WorkHeader {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.header
+    }
+}
+
 impl WorkHeader {
     pub fn new(header: WrappedHeader, chain_work: Uint256) -> WorkHeader {
         WorkHeader {
             header,
             chain_work: Adapter::new(chain_work),
         }
-    }
-
-    fn time(&self) -> u32 {
-        self.header.time()
-    }
-
-    fn block_hash(&self) -> BlockHash {
-        self.header.block_hash()
-    }
-
-    pub fn work(&self) -> Uint256 {
-        self.header.work()
-    }
-
-    pub fn height(&self) -> u32 {
-        self.header.height()
     }
 }
 
@@ -347,11 +328,11 @@ impl HeaderQueue {
                 }
             };
 
-            if header.height() != previous_header.height() + 1 {
+            if header.height != previous_header.height + 1 {
                 return Err(Error::Header("Non-consecutive headers passed".into()));
             }
 
-            if header.prev_blockhash() != previous_header.block_hash() {
+            if header.prev_blockhash != previous_header.block_hash() {
                 return Err(Error::Header(
                     "Passed header references incorrect previous block hash".into(),
                 ));
@@ -379,17 +360,17 @@ impl HeaderQueue {
         header: &WrappedHeader,
         previous_header: &WrappedHeader,
     ) -> Result<Uint256> {
-        if header.height() % self.config.retarget_interval != 0 {
+        if header.height % self.config.retarget_interval != 0 {
             if self.config.min_difficulty_blocks {
-                if header.time() > previous_header.time() + self.config.target_spacing * 2 {
+                if header.time > previous_header.time + self.config.target_spacing * 2 {
                     return Ok(WrappedHeader::u256_from_compact(self.config.max_target));
                 } else {
-                    let mut current_header_index = previous_header.height();
+                    let mut current_header_index = previous_header.height;
                     let mut current_header = previous_header.to_owned();
 
                     while current_header_index > 0
                         && current_header_index % self.config.retarget_interval != 0
-                        && current_header.bits() == self.config.max_target
+                        && current_header.bits == self.config.max_target
                     {
                         current_header = match self.get_by_height(current_header_index)? {
                             Some(inner) => inner.header.clone(),
@@ -401,14 +382,14 @@ impl HeaderQueue {
                         current_header_index -= 1;
                     }
 
-                    return Ok(WrappedHeader::u256_from_compact(current_header.bits()));
+                    return Ok(WrappedHeader::u256_from_compact(current_header.bits));
                 }
             }
 
             return Ok(previous_header.target());
         }
 
-        let first_reorg_height = header.height() - self.config.retarget_interval;
+        let first_reorg_height = header.height - self.config.retarget_interval;
 
         self.calculate_next_target(previous_header, first_reorg_height)
     }
@@ -419,15 +400,15 @@ impl HeaderQueue {
         first_reorg_height: u32,
     ) -> Result<Uint256> {
         if !self.config.retargeting {
-            return Ok(WrappedHeader::u256_from_compact(header.bits()));
+            return Ok(WrappedHeader::u256_from_compact(header.bits));
         }
 
-        if header.height() < self.config.retarget_interval {
+        if header.height < self.config.retarget_interval {
             return Err(Error::Header("Invalid trusted header. Trusted header have height which is a multiple of the retarget interval".into()));
         }
 
         let prev_retarget = match self.get_by_height(first_reorg_height)? {
-            Some(inner) => inner.time(),
+            Some(inner) => inner.time,
             None => {
                 return Err(Error::Header(
                     "No previous retargeting header exists".into(),
@@ -435,7 +416,7 @@ impl HeaderQueue {
             }
         };
 
-        let mut timespan = header.time() - prev_retarget;
+        let mut timespan = header.time - prev_retarget;
 
         if timespan < self.config.target_timespan / 4 {
             timespan = self.config.target_timespan / 4;
@@ -529,7 +510,7 @@ impl HeaderQueue {
                 Some(inner) => inner,
                 None => return Err(Error::Header("Deque does not contain any elements".into())),
             };
-            prev_stamps.push(current_item.time());
+            prev_stamps.push(current_item.time);
         }
 
         prev_stamps.sort_unstable();
@@ -541,7 +522,7 @@ impl HeaderQueue {
             }
         };
 
-        if current_header.time() <= *median_stamp {
+        if current_header.time <= *median_stamp {
             return Err(Error::Header("Header contains an invalid timestamp".into()));
         }
 
@@ -560,7 +541,7 @@ impl HeaderQueue {
     #[query]
     pub fn height(&self) -> Result<u32> {
         match self.deque.back()? {
-            Some(inner) => Ok((*inner).height()),
+            Some(inner) => Ok((*inner).height),
             None => Ok(0),
         }
     }
@@ -576,7 +557,7 @@ impl HeaderQueue {
     #[query]
     pub fn get_by_height(&self, height: u32) -> Result<Option<WorkHeader>> {
         let initial_height = match self.deque.front()? {
-            Some(inner) => inner.height(),
+            Some(inner) => inner.height,
             None => return Err(Error::Header("Queue does not contain any headers".into())),
         };
 
@@ -637,7 +618,7 @@ mod test {
             Decode::decode(ENCODED_TRUSTED_HEADER.as_slice()).unwrap();
         let wrapped_header = WrappedHeader::new(decoded_adapter, TRUSTED_HEIGHT);
 
-        assert_eq!(q.height().unwrap(), wrapped_header.height());
+        assert_eq!(q.height().unwrap(), wrapped_header.height);
         assert_eq!(*q.current_work, wrapped_header.work());
     }
 
