@@ -131,6 +131,22 @@ impl<P: PegClient> Relayer<P> {
 
         Ok(tip_height as u32)
     }
+
+    fn step_header(&mut self) -> Result<()> {
+        let tip_hash = self.btc_client.get_best_block_hash()?;
+        let tip_height = self.btc_client.get_block_header_info(&tip_hash)?.height;
+        println!(
+            "relayer listen: btc={}, app={}",
+            tip_height,
+            self.peg_client.height()?
+        );
+        if tip_height as u32 > self.peg_client.height()? {
+            self.seek_to_tip()?;
+        } else {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
