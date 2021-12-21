@@ -68,16 +68,16 @@ impl<P: PegClient> Relayer<P> {
         }
     }
 
-    fn listen(&mut self, func: &dyn Fn(&mut Self) -> Result<()>) -> Result<!> {
+    fn listen<F: Fn(&mut Self) -> Result<()>>(&mut self, func: &F) -> Result<!> {
         loop {
             func(self)?;
         }
     }
 
     #[cfg(test)]
-    fn bounded_listen(
+    fn bounded_listen<F: Fn(&mut Self) -> Result<()>>(
         &mut self,
-        func: &mut dyn FnMut(&mut Self) -> Result<()>,
+        func: &F,
         num_blocks: u32,
     ) -> Result<()> {
         for _ in 0..num_blocks {
