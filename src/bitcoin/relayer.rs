@@ -1,21 +1,26 @@
 use crate::app::InnerApp;
+use crate::bitcoin::adapter::Adapter;
 use crate::bitcoin::header_queue::{HeaderList, HeaderQueue, WrappedHeader};
 use crate::error::{Error, Result};
 use bitcoin::util::merkleblock::{MerkleBlock, PartialMerkleTree};
+use bitcoin::TxMerkleNode;
 use bitcoin::{Script, Transaction};
 use bitcoincore_rpc::bitcoincore_rpc_json::ScanTxOutRequest;
 use bitcoincore_rpc::{Client as BtcClient, RpcApi};
 use orga::coins::Address;
+use orga::encoding::{Decode, Encode};
 use orga::prelude::*;
 use std::collections::HashMap;
 
 const SEEK_BATCH_SIZE: u32 = 10;
 
+#[derive(Encode, Decode)]
 pub struct DepositTxn {
-    block_height: u32,
-    transaction: Transaction,
-    proof: PartialMerkleTree,
-    payable_addr: Address,
+    pub block_height: u32,
+    pub transaction: Adapter<Transaction>,
+    pub index: u32,
+    pub proof: Adapter<PartialMerkleTree>,
+    pub payable_addr: Address,
 }
 
 type AppClient = TendermintClient<crate::app::App>;
@@ -177,21 +182,28 @@ impl<P: PegClient> Relayer<P> {
             let block_hash = self.btc_client.get_block_hash(tx.height as u64)?;
             let block = self.btc_client.get_block(&block_hash)?;
             let block_proof = MerkleBlock::from_block_with_predicate(&block, |x| x == &tx.txid).txn;
-
             let payable_addr = match self.listen_map.get(&tx.script_pub_key) {
                 Some(pk) => pk,
                 None => continue,
             };
 
-            let transaction = self.btc_client.get_transaction(&tx.txid)?;
+            let transaction_result = self.btc_client.get_transaction(&tx.txid, Some(false))?;
+            let transaction = transaction_result.transaction()?;
+            let index = match transaction_result.info.blockindex {
+                Some(index) => index,
+                //not sure if should just pass through quitely here
+                None => continue,
+            };
 
             let deposit = DepositTxn {
                 block_height: tx.height as u32,
-                transaction,
-                proof: block_proof,
-                payable_addr,
+                transaction: Adapter::new(transaction),
+                index: index as u32,
+                proof: Adapter::new(block_proof),
+                payable_addr: *payable_addr,
             };
 
+            tx_list.push(deposit);
             //some kind of call that sends this to the chain to be verified
         }
 
@@ -204,25 +216,12 @@ mod tests {
     use super::*;
     use crate::bitcoin::adapter::Adapter;
     use crate::bitcoin::header_queue::Config;
+    use crate::bitcoin::peg::Peg;
     use bitcoincore_rpc::Auth;
     use bitcoind::BitcoinD;
     use orga::encoding::Encode;
     use orga::store::{MapStore, Shared, Store};
     use std::sync::{Arc, Mutex};
-
-    impl PegClient for Arc<Mutex<HeaderQueue>> {
-        fn height(&self) -> Result<u32> {
-            self.lock().unwrap().height()
-        }
-
-        fn trusted_height(&self) -> Result<u32> {
-            Ok(self.lock().unwrap().trusted_height())
-        }
-
-        fn add(&mut self, headers: HeaderList) -> Result<()> {
-            self.lock().unwrap().add_into_iter(headers)
-        }
-    }
 
     #[test]
     fn relayer_seek() {
@@ -250,10 +249,10 @@ mod tests {
 
         let header_queue = HeaderQueue::with_conf(store, Default::default(), config).unwrap();
 
-        let arc_mut = Arc::new(Mutex::new(header_queue));
+        let arc_mut = Arc::new(Mutex::new(Peg::new(header_queue)));
         let mut relayer = Relayer::new(rpc_client, arc_mut.clone());
         relayer.seek_to_tip().unwrap();
-        let height = arc_mut.lock().unwrap().height().unwrap();
+        let height = arc_mut.height().unwrap();
 
         assert_eq!(height, 130);
     }
@@ -286,10 +285,10 @@ mod tests {
         let store = Store::new(Shared::new(MapStore::new()).into());
 
         let header_queue = HeaderQueue::with_conf(store, Default::default(), config).unwrap();
-        let arc_mut = Arc::new(Mutex::new(header_queue));
+        let arc_mut = Arc::new(Mutex::new(Peg::new(header_queue)));
         let mut relayer = Relayer::new(rpc_client, arc_mut.clone());
         relayer.seek_to_tip().unwrap();
-        let height = arc_mut.lock().unwrap().height().unwrap();
+        let height = arc_mut.height().unwrap();
 
         assert_eq!(height, 72);
     }
