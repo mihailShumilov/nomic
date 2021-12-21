@@ -29,31 +29,8 @@ pub trait PegClient {
     fn height(&self) -> Result<u32>;
     fn trusted_height(&self) -> Result<u32>;
     fn add(&mut self, header: HeaderList) -> Result<()>;
+    fn verify_deposit(&self, deposit: DepositTxn) -> Result<bool>;
 }
-
-// impl PegClient for AppClient {
-//      fn height(&self) -> OrgaResult<u32> {
-//         self.app_client
-//             .query(
-//                 AppQuery::FieldBtcHeaders(HeaderQueueQuery::MethodHeight(vec![])),
-//                 |state| Ok(state.btc_headers.height().unwrap()),
-//             )
-//
-//     }
-
-//      fn trusted_height(&self) -> OrgaResult<u32> {
-//         self.app_client
-//             .query(
-//                 AppQuery::FieldBtcHeaders(HeaderQueueQuery::MethodTrustedHeight(vec![])),
-//                 |state| Ok(state.btc_headers.trusted_height()),
-//             )
-//
-//     }
-
-//      fn add(&mut self, headers: HeaderList) -> OrgaResult<()> {
-//         self.app_client.btc_headers.add(headers)
-//     }
-// }
 
 pub struct Relayer<P: PegClient> {
     btc_client: BtcClient,
@@ -173,6 +150,8 @@ impl<P: PegClient> Relayer<P> {
             .map(|desc| ScanTxOutRequest::Single(desc.to_owned()))
             .collect();
         let tx_outset = self.btc_client.scan_tx_out_set_blocking(&descriptors)?;
+
+        let mut tx_list: Vec<DepositTxn> = Vec::new();
 
         for tx in tx_outset.unspents.iter() {
             if !tx.script_pub_key.is_v0_p2wsh() {
