@@ -54,12 +54,6 @@ impl<T> DerefMut for Adapter<T> {
 }
 
 impl<T: Encodable> Encode for Adapter<T> {
-    fn encode(&self) -> EncodingResult<Vec<u8>> {
-        let mut dest: Vec<u8> = Vec::new();
-        self.encode_into(&mut dest)?;
-        Ok(dest)
-    }
-
     fn encode_into<W: Write>(&self, dest: &mut W) -> EncodingResult<()> {
         match self.inner.consensus_encode(dest) {
             Ok(_) => Ok(()),
