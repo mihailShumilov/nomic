@@ -3,7 +3,6 @@ use crate::bitcoin::adapter::Adapter;
 use crate::bitcoin::header_queue::{HeaderList, HeaderQueue, WrappedHeader};
 use crate::error::{Error, Result};
 use bitcoin::util::merkleblock::{MerkleBlock, PartialMerkleTree};
-use bitcoin::TxMerkleNode;
 use bitcoin::{Script, Transaction};
 use bitcoincore_rpc::bitcoincore_rpc_json::ScanTxOutRequest;
 use bitcoincore_rpc::{Client as BtcClient, RpcApi};
@@ -50,28 +49,12 @@ impl<P: PegClient> Relayer<P> {
         }
     }
 
-    fn listen<F: Fn(&mut Self) -> Result<()>>(&mut self, func: &F) -> Result<!> {
-        loop {
-            func(self)?;
-        }
-    }
-
-    #[cfg(test)]
-    fn bounded_listen<F: Fn(&mut Self) -> Result<()>>(
-        &mut self,
-        func: &F,
-        num_blocks: u32,
-    ) -> Result<()> {
-        for _ in 0..num_blocks {
-            func(self)?;
-        }
-
-        Ok(())
-    }
-
     pub fn start(&mut self) -> Result<!> {
         self.wait_for_trusted_header()?;
-        self.listen(&Relayer::step_header)
+        loop {
+            self.step_header()?;
+            self.step_transaction()?;
+        }
     }
 
     fn wait_for_trusted_header(&self) -> Result<()> {
@@ -144,11 +127,12 @@ impl<P: PegClient> Relayer<P> {
         Ok(())
     }
 
-    fn step_transaction(&mut self, descriptors: &[String]) -> Result<()> {
-        let descriptors: Vec<_> = descriptors
-            .iter()
-            .map(|desc| ScanTxOutRequest::Single(desc.to_owned()))
-            .collect();
+    fn get_descriptors(&self) -> Result<Vec<ScanTxOutRequest>> {
+        todo!()
+    }
+
+    fn step_transaction(&mut self) -> Result<()> {
+        let descriptors = self.get_descriptors()?;
         let tx_outset = self.btc_client.scan_tx_out_set_blocking(&descriptors)?;
 
         let mut tx_list: Vec<DepositTxn> = Vec::new();
