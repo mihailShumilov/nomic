@@ -51,19 +51,16 @@ impl PegClient for Arc<Mutex<Peg>> {
         ) {
             Ok(merkle_root) => merkle_root,
             Err(_) => {
-                return Err(Error::Relayer(format!(
-                    "Failed to extract merkle root from proof"
-                )))
+                return Err(Error::Relayer(
+                    "Failed to extract merkle root from proof".to_string(),
+                ))
             }
         };
 
         if header_merkle_root != proof_merkle_root {
-            return Err(Error::Relayer(format!(
-                "Merkle root mismatch. Expected: {}, Actual: {}",
-                header_merkle_root, proof_merkle_root
-            )));
+            Ok(false)
+        } else {
+            Ok(true)
         }
-
-        Ok(true)
     }
 }
