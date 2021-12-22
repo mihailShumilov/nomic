@@ -9,15 +9,15 @@ use std::ops::{Deref, DerefMut};
 pub struct Checkpoint {
     #[key]
     height: u64,
-    checkpoint: EntryMap<Adapter<Signatory>>,
+    checkpoint: EntryMap<Signatory>,
 }
 
 impl Checkpoint {
-    pub fn new(height: u64, checkpoint: EntryMap<Adapter<Signatory>>) -> Self {
+    pub fn new(height: u64, checkpoint: EntryMap<Signatory>) -> Self {
         Self { height, checkpoint }
     }
 
-    pub fn checkpoint(&self) -> &EntryMap<Adapter<Signatory>> {
+    pub fn checkpoint(&self) -> &EntryMap<Signatory> {
         &self.checkpoint
     }
 }
