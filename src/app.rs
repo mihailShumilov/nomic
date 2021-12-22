@@ -1,3 +1,4 @@
+use crate::bitcoin::checkpoint_set::CheckpointSet;
 use crate::bitcoin::header_queue::HeaderQueue;
 use orga::prelude::*;
 
@@ -10,6 +11,7 @@ pub struct InnerApp {
     pub accounts: Accounts<Gucci>,
     pub staking: Staking<Gucci>,
     pub btc_headers: HeaderQueue,
+    pub checkpoints: CheckpointSet,
 }
 
 impl InitChain for InnerApp {
