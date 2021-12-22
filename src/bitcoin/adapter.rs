@@ -1,4 +1,5 @@
 use bitcoin::consensus::{Decodable, Encodable};
+use orga::collections::Entry;
 use orga::encoding::Result as EncodingResult;
 use orga::prelude::*;
 use orga::state::State;
@@ -82,6 +83,21 @@ impl<T: Decodable> Decode for Adapter<T> {
                 );
                 Err(std_e.into())
             }
+        }
+    }
+}
+
+impl<T: Entry> Entry for Adapter<T> {
+    type Key = T::Key;
+    type Value = T::Value;
+
+    fn into_entry(self) -> (Self::Key, Self::Value) {
+        self.inner.into_entry()
+    }
+
+    fn from_entry(entry: (Self::Key, Self::Value)) -> Self {
+        Self {
+            inner: T::from_entry(entry),
         }
     }
 }
