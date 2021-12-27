@@ -539,7 +539,7 @@ impl HeaderQueue {
     }
 
     #[query]
-    pub fn height(&self) -> Result<u32> {
+    pub fn height(&self) -> OrgaResult<u32> {
         match self.deque.back()? {
             Some(inner) => Ok((*inner).height),
             None => Ok(0),
