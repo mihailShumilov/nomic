@@ -10,6 +10,7 @@ use bitcoincore_rpc::{Client as BtcClient, RpcApi};
 use orga::coins::Address;
 use orga::encoding::{Decode, Encode};
 use orga::prelude::*;
+use orga::Result as OrgaResult;
 use std::collections::HashMap;
 
 const SEEK_BATCH_SIZE: u32 = 10;
@@ -45,6 +46,13 @@ impl Relayer {
         }
     }
 
+    pub async fn app_height(&self) -> OrgaResult<u32> {
+        let app_height_query = AppQuery::FieldPeg(PegQuery::MethodHeight(vec![]));
+        self.app_client
+            .query(app_height_query, |state| state.peg.height())
+            .await
+    }
+
     pub async fn start(&mut self) -> Result<!> {
         self.wait_for_trusted_header().await?;
         loop {
@@ -77,12 +85,7 @@ impl Relayer {
 
     async fn seek_to_tip(&mut self) -> Result<()> {
         let tip_height = self.get_rpc_height()?;
-        let app_height_query = AppQuery::FieldPeg(PegQuery::MethodHeight(vec![]));
-        let mut app_height: u32 = self
-            .app_client
-            .query(app_height_query, |state| state.peg.height())
-            .await?
-            .into();
+        let mut app_height = self.app_height().await?;
 
         while app_height < tip_height {
             println!("seek_to_tip: btc={}, app={}", tip_height, app_height);
@@ -90,12 +93,7 @@ impl Relayer {
 
             self.app_client.peg.add(headers.into()).await?;
 
-            let app_height_query = AppQuery::FieldPeg(PegQuery::MethodHeight(vec![]));
-            app_height = self
-                .app_client
-                .query(app_height_query, |state| state.peg.height())
-                .await?
-                .into();
+            app_height = self.app_height().await?;
         }
         Ok(())
     }
@@ -103,12 +101,7 @@ impl Relayer {
     async fn get_header_batch(&self, batch_size: u32) -> Result<Vec<WrappedHeader>> {
         let mut headers = Vec::with_capacity(batch_size as usize);
         for i in 1..=batch_size {
-            let app_height_query = AppQuery::FieldPeg(PegQuery::MethodHeight(vec![]));
-            let app_height: u32 = self
-                .app_client
-                .query(app_height_query, |state| state.peg.height())
-                .await?
-                .into();
+            let app_height = self.app_height().await?;
 
             let hash = match self.btc_client.get_block_hash((app_height + i) as u64) {
                 Ok(hash) => hash,
@@ -134,12 +127,8 @@ impl Relayer {
     async fn step_header(&mut self) -> Result<()> {
         let tip_hash = self.btc_client.get_best_block_hash()?;
         let tip_height = self.btc_client.get_block_header_info(&tip_hash)?.height;
-        let app_height_query = AppQuery::FieldPeg(PegQuery::MethodHeight(vec![]));
-        let app_height: u32 = self
-            .app_client
-            .query(app_height_query, |state| state.peg.height())
-            .await?
-            .into();
+        let app_height = self.app_height().await?;
+
         println!("relayer listen: btc={}, app={}", tip_height, app_height);
         if tip_height as u32 > app_height {
             self.seek_to_tip().await?;
