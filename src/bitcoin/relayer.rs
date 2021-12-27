@@ -53,6 +53,13 @@ impl Relayer {
             .await
     }
 
+    pub async fn app_trusted_height(&self) -> OrgaResult<u32> {
+        let app_height_query = AppQuery::FieldPeg(PegQuery::MethodTrustedHeight(vec![]));
+        self.app_client
+            .query(app_height_query, |state| state.peg.trusted_height())
+            .await
+    }
+
     pub async fn start(&mut self) -> Result<!> {
         self.wait_for_trusted_header().await?;
         loop {
@@ -66,12 +73,7 @@ impl Relayer {
             let tip_hash = self.btc_client.get_best_block_hash()?;
             let tip_height = self.btc_client.get_block_header_info(&tip_hash)?.height;
             println!("wait_for_trusted_header: btc={}", tip_height);
-            let trusted_height_query = AppQuery::FieldPeg(PegQuery::MethodTrustedHeight(vec![]));
-            let trusted_height = self
-                .app_client
-                .query(trusted_height_query, |state| state.peg.trusted_height())
-                .await?
-                .into();
+            let trusted_height = self.app_trusted_height().await?;
 
             if (tip_height as u32) < trusted_height {
                 std::thread::sleep(std::time::Duration::from_secs(1));
