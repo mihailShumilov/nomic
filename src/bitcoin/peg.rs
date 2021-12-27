@@ -1,40 +1,46 @@
+use crate::bitcoin::checkpoint_set::CheckpointSet;
 use crate::bitcoin::header_queue::HeaderList;
 use crate::bitcoin::header_queue::HeaderQueue;
 use crate::bitcoin::relayer::DepositTxn;
-use crate::bitcoin::relayer::PegClient;
 use crate::error::{Error, Result};
-use std::sync::{Arc, Mutex};
+use orga::call::Call;
+use orga::client::Client;
+use orga::query::Query;
+use orga::state::State;
+use orga::Result as OrgaResult;
 
+#[derive(State, Call, Query, Client)]
 pub struct Peg {
     headers: HeaderQueue,
 }
 
 impl Peg {
-    pub fn new(headers: HeaderQueue) -> Peg {
-        Peg { headers }
-    }
-}
-
-impl PegClient for Arc<Mutex<Peg>> {
-    fn height(&self) -> Result<u32> {
-        self.lock().unwrap().headers.height()
+    #[query]
+    pub fn hello(&self) -> OrgaResult<u64> {
+        Ok(42)
     }
 
-    fn trusted_height(&self) -> Result<u32> {
-        Ok(self.lock().unwrap().headers.trusted_height())
+    #[query]
+    pub fn trusted_height(&self) -> OrgaResult<u32> {
+        Ok(self.headers.trusted_height())
     }
 
-    fn add(&mut self, header: HeaderList) -> Result<()> {
-        Ok(self.lock().unwrap().headers.add(header)?)
+    #[query]
+    pub fn height(&self) -> OrgaResult<u32> {
+        self.headers.height()
+    }
+
+    #[call]
+    pub fn add(&mut self, header: HeaderList) -> OrgaResult<()> {
+        Ok(self.headers.add(header)?)
+    }
+
+    fn get_signatory_set(&self) -> Result<CheckpointSet> {
+        unimplemented!()
     }
 
     fn verify_deposit(&self, deposit: DepositTxn) -> Result<bool> {
-        let header = match self
-            .lock()
-            .unwrap()
-            .headers
-            .get_by_height(deposit.block_height)?
-        {
+        let header = match self.headers.get_by_height(deposit.block_height)? {
             Some(header) => header,
             None => {
                 return Err(Error::Relayer(format!(
@@ -57,10 +63,6 @@ impl PegClient for Arc<Mutex<Peg>> {
             }
         };
 
-        if header_merkle_root != proof_merkle_root {
-            Ok(false)
-        } else {
-            Ok(true)
-        }
+        Ok(header_merkle_root == proof_merkle_root)
     }
 }
