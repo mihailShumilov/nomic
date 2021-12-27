@@ -1,5 +1,5 @@
 use crate::bitcoin::checkpoint_set::CheckpointSet;
-use crate::bitcoin::header_queue::HeaderQueue;
+use crate::bitcoin::peg::Peg;
 use orga::prelude::*;
 
 #[derive(State, Debug, Clone)]
@@ -10,7 +10,7 @@ impl Symbol for Gucci {}
 pub struct InnerApp {
     pub accounts: Accounts<Gucci>,
     pub staking: Staking<Gucci>,
-    pub btc_headers: HeaderQueue,
+    pub peg: Peg,
     pub checkpoints: CheckpointSet,
 }
 
