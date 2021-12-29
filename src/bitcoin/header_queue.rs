@@ -168,7 +168,7 @@ impl WorkHeader {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     pub max_length: u64,
     pub max_time_increase: u32,
@@ -182,6 +182,7 @@ pub struct Config {
     pub min_difficulty_blocks: bool,
 }
 
+#[cfg(not(feature = "mock"))]
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -195,6 +196,30 @@ impl Default for Config {
             encoded_trusted_header: ENCODED_TRUSTED_HEADER.into(),
             retargeting: true,
             min_difficulty_blocks: false,
+        }
+    }
+}
+
+#[cfg(feature = "mock")]
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            max_length: MAX_LENGTH,
+            max_time_increase: MAX_TIME_INCREASE,
+            trusted_height: 0,
+            retarget_interval: RETARGET_INTERVAL,
+            target_spacing: TARGET_SPACING,
+            target_timespan: TARGET_TIMESPAN,
+            max_target: MAX_TARGET,
+            encoded_trusted_header: [
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 59, 163, 237, 253, 122, 123, 18, 178, 122, 199, 44, 62,
+                103, 118, 143, 97, 127, 200, 27, 195, 136, 138, 81, 50, 58, 159, 184, 170, 75, 30,
+                94, 74, 218, 229, 73, 77, 255, 255, 127, 32, 2, 0, 0, 0,
+            ]
+            .into(),
+            retargeting: false,
+            min_difficulty_blocks: true,
         }
     }
 }
