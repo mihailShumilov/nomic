@@ -67,7 +67,17 @@ impl Relayer {
         }
     }
 
-    async fn wait_for_trusted_header(&self) -> Result<()> {
+    pub async fn bounded_start(&mut self, num_blocks: u32) -> Result<()> {
+        self.wait_for_trusted_header().await?;
+
+        for _ in 0..num_blocks {
+            self.step_header().await?;
+            self.step_transaction()?;
+        }
+        Ok(())
+    }
+
+    pub async fn wait_for_trusted_header(&self) -> Result<()> {
         loop {
             let tip_hash = self.btc_client.get_best_block_hash()?;
             let tip_height = self.btc_client.get_block_header_info(&tip_hash)?.height;
