@@ -1,4 +1,3 @@
-use crate::bitcoin::adapter::Adapter;
 use crate::bitcoin::signatory_set::Signatory;
 use orga::collections::Entry;
 use orga::collections::EntryMap;
