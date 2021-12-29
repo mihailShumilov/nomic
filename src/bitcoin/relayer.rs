@@ -1,8 +1,8 @@
 use crate::app::InnerApp;
 use crate::bitcoin::adapter::Adapter;
-use crate::bitcoin::header_queue::{HeaderList, HeaderQueue, WrappedHeader};
+use crate::bitcoin::header_queue::WrappedHeader;
 use crate::bitcoin::peg::Peg;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use bitcoin::util::merkleblock::{MerkleBlock, PartialMerkleTree};
 use bitcoin::{Script, Transaction};
 use bitcoincore_rpc::bitcoincore_rpc_json::ScanTxOutRequest;
