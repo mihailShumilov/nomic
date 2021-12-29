@@ -1,4 +1,5 @@
 use crate::bitcoin::checkpoint_set::CheckpointSet;
+use crate::bitcoin::header_queue::Config;
 use crate::bitcoin::header_queue::HeaderList;
 use crate::bitcoin::header_queue::HeaderQueue;
 use crate::bitcoin::relayer::DepositTxn;
@@ -7,6 +8,7 @@ use orga::call::Call;
 use orga::client::Client;
 use orga::query::Query;
 use orga::state::State;
+use orga::store::Store;
 use orga::Result as OrgaResult;
 
 #[derive(State, Call, Query, Client)]
