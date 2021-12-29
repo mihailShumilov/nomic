@@ -25,17 +25,16 @@ pub struct DepositTxn {
 }
 
 type AppClient = TendermintClient<crate::app::App>;
+type AppQuery = <InnerApp as Query>::Query;
+type PegQuery = <Peg as Query>::Query;
+
+type AppCall = <InnerApp as Call>::Call;
 
 pub struct Relayer {
     btc_client: BtcClient,
     app_client: AppClient,
     listen_map: HashMap<Script, Address>,
 }
-
-type AppQuery = <InnerApp as Query>::Query;
-type PegQuery = <Peg as Query>::Query;
-
-type AppCall = <InnerApp as Call>::Call;
 
 impl Relayer {
     pub fn new(btc_client: BtcClient, app_client: AppClient) -> Self {
