@@ -16,11 +16,6 @@ pub struct Peg {
 
 impl Peg {
     #[query]
-    pub fn hello(&self) -> OrgaResult<u64> {
-        Ok(42)
-    }
-
-    #[query]
     pub fn trusted_height(&self) -> OrgaResult<u32> {
         Ok(self.headers.trusted_height())
     }
